@@ -42,6 +42,21 @@ st.markdown("""
         font-family: 'Inter', sans-serif;
     }
     
+    /* Completely hide Streamlit Cloud footer, "Hosted with Streamlit" badge, and header */
+    #MainMenu {visibility: hidden !important; display: none !important;}
+    footer {visibility: hidden !important; display: none !important;}
+    header {visibility: hidden !important; display: none !important;}
+    [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
+    [data-testid="stDecoration"] {visibility: hidden !important; display: none !important;}
+    [data-testid="stStatusWidget"] {visibility: hidden !important; display: none !important;}
+    .stDeployButton {display: none !important;}
+    div[class*="viewerBadge_"] {display: none !important; visibility: hidden !important;}
+    a[class*="viewerBadge_"] {display: none !important; visibility: hidden !important;}
+    span[class*="viewerBadge_"] {display: none !important; visibility: hidden !important;}
+    div[data-testid="stBottomBlockContainer"] {display: none !important;}
+    .reportview-container .main footer {visibility: hidden !important;}
+    iframe[title="streamlit_viewer_badge"] {display: none !important;}
+    
     .main-title-container {
         background: linear-gradient(135deg, #002e6e 0%, #00b9f1 100%);
         padding: 22px 26px;
