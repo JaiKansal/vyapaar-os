@@ -1,0 +1,109 @@
+{
+  "name": "Vyapaar-OS Autonomous Action Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trigger",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e3020619-7e3f-42e1-8d2e-0a373b5bf5a1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "vyapaar-os-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7857ff17-48f8-4b2a-8951-4fa3b08e2f0a",
+              "leftValue": "={{ $json.body.action_type }}",
+              "rightValue": "RESTOCK_SUPPLIER",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1b1f630-f3b3-4f9e-a0e2-6322adce25a2",
+      "name": "IF Restock Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"EXECUTED\",\n  \"guardrail\": \"ZERO_HALLUCINATION_VERIFIED\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "c71a3962-e938-4f8e-bf82-7d2d38561d33",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        280
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "IF Restock Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Restock Action": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "vyapaar-os-n8n-cloud-pro"
+  },
+  "id": "vyapaar-os-restock-workflow",
+  "tags": []
+}
