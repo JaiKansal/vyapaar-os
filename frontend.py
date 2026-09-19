@@ -416,16 +416,18 @@ tab_voice, tab_khata, tab_loan, tab_stock, tab_parchi = st.tabs([
 # DUKAAN TAB 1: BOLO AUR LIKHO (SOUNDBOX VOICE)
 # --------------------------------------------------------------------------
 with tab_voice:
+    is_eng = st.session_state.get("app_lang") == "English"
+
     # Hands-Free Wake Word Banner (Google Assistant / Siri Style - Zero Click)
-    st.markdown("""
+    st.markdown(f"""
     <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 2px solid #00b9f1; border-radius: 14px; padding: 14px 18px; color: #fff; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0, 185, 241, 0.15);">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
-                <span style="font-size: 1.05rem; font-weight: 800; color: #38bdf8;">🤖 ऑटोमैटिक वेक-वर्ड साउंडबॉक्स (Always-On Voice Assistant)</span>
+                <span style="font-size: 1.05rem; font-weight: 800; color: #38bdf8;">{T('🤖 ऑटोमैटिक वेक-वर्ड साउंडबॉक्स (Always-On Voice Assistant)', '🤖 Automatic Wake-Word Soundbox (Always-On Voice Assistant)')}</span>
                 <div style="font-size: 0.88rem; color: #cbd5e1; margin-top: 4px;">
-                    Google Assistant या Siri की तरह — बिना कोई बटन दबाए सीधे काउंटर पर बोलें: 
-                    <span style="color: #4ade80; font-weight: 700; background: rgba(74,222,128,0.15); padding: 2px 8px; border-radius: 6px;">"हे मुनीमजी"</span> या 
-                    <span style="color: #38bdf8; font-weight: 700; background: rgba(56,189,248,0.15); padding: 2px 8px; border-radius: 6px;">"नमस्ते मुनीमजी"</span> या 
+                    {T('Google Assistant या Siri की तरह — बिना कोई बटन दबाए सीधे काउंटर पर बोलें:', 'Just like Google Assistant or Siri — speak directly to the counter hands-free:')} 
+                    <span style="color: #4ade80; font-weight: 700; background: rgba(74,222,128,0.15); padding: 2px 8px; border-radius: 6px;">"हे मुनीमजी"</span> {T('या', 'or')} 
+                    <span style="color: #38bdf8; font-weight: 700; background: rgba(56,189,248,0.15); padding: 2px 8px; border-radius: 6px;">"नमस्ते मुनीमजी"</span> {T('या', 'or')} 
                     <span style="color: #facc15; font-weight: 700; background: rgba(250,204,21,0.15); padding: 2px 8px; border-radius: 6px;">"Hey Munimji"</span>
                 </div>
             </div>
@@ -436,7 +438,10 @@ with tab_voice:
     </div>
     """, unsafe_allow_html=True)
 
-    # Embedded Always-On Continuous Web Speech Listener (No Button Needed)
+    # Embedded Always-On Continuous Web Speech Listener (Bilingual)
+    initial_status = "🟢 <strong>Soundbox mic is continuously active • Say: 'Hey Munimji' or 'Munimji'</strong>" if is_eng else "🟢 <strong>साउंडबॉक्स माइक हमेशा चालू है (Always-On Active) • बोलें: 'हे मुनीमजी' या 'नमस्ते मुनीमजी'</strong>"
+    initial_transcript = "🎙️ <em>Soundbox is continuously listening at the counter. Speak directly: \"Hey Munimji\" (e.g. \"Hey Munimji, record ₹500 credit for Sharma ji\")...</em>" if is_eng else "🎙️ <em>साउंडबॉक्स काउंटर पर हमेशा सुन रहा है। बिना कोई बटन दबाए सीधे बोलें \"हे मुनीमजी\" (उदा: \"हे मुनीमजी, शर्मा जी का ₹500 उधार लिख लो\")...</em>"
+
     wake_listener_html = f"""
     <!DOCTYPE html>
     <html>
@@ -518,30 +523,24 @@ with tab_voice:
             <div class="wake-status">
                 <div class="status-left">
                     <span id="dot" class="pulse-dot"></span>
-                    <span id="status_text">🟢 <strong>साउंडबॉक्स माइक हमेशा चालू है (Always-On Active) • बोलें: 'हे मुनीमजी' या 'नमस्ते मुनीमजी'</strong></span>
+                    <span id="status_text">{initial_status}</span>
                 </div>
                 <span class="badge-live">LIVE LISTENING</span>
             </div>
             <div class="transcript-box" id="transcript_display">
-                🎙️ <em>साउंडबॉक्स काउंटर पर हमेशा सुन रहा है। बिना कोई बटन दबाए सीधे बोलें "हे मुनीमजी" (उदा: "हे मुनीमजी, शर्मा जी का ₹500 उधार लिख लो")...</em>
+                {initial_transcript}
             </div>
         </div>
 
         <script>
-            // ═══════════════════════════════════════════════════
-            //  HYBRID ALWAYS-ON SOUNDBOX LISTENER
-            //  Wake Word: Real-time Web Speech (0ms latency, always-on)
-            //  STT: Sarvam Saaras v3 (/api/process-voice with clean WAV)
-            //  TTS: Sarvam Bulbul v2 (natural Indian shopkeeper voice)
-            // ═══════════════════════════════════════════════════
-            var isProcessing = false;   // true while API request is in-flight
-            var isPlaying    = false;   // true while TTS audio is playing (mic MUTED)
-            var wakeDetected = false;   // true once wake word is heard
-            var silenceTimer = null;    // timer to detect end of command speech
+            var isEnglish = {'true' if is_eng else 'false'};
+            var isProcessing = false;
+            var isPlaying    = false;
+            var wakeDetected = false;
+            var silenceTimer = null;
             var activeCommandText = "";
             var backendUrl = "{BACKEND_URL}";
 
-            // PCM Audio recording via Web Audio API (outputs pure WAV)
             var audioCtx = null;
             var micStream = null;
             var micSource = null;
@@ -550,12 +549,8 @@ with tab_voice:
             var pcmLength = 0;
             var isRecordingWav = false;
 
-            // Wake-word regex — matches Hindi, Hinglish, English wake phrases
             var WAKE_REGEX = /(हे\\s*मुनीम|नमस्ते\\s*मुनीम|सुनो\\s*मुनीम|मुनीम\\s*जी|मुनीमजी|hey\\s*munim|he\\s*munim|ok\\s*munim|namaste\\s*munim|munimji)/i;
 
-            // ───────────────────────────────────────────────────
-            // Web Audio PCM WAV Recorder
-            // ───────────────────────────────────────────────────
             function initAudioContext(stream) {{
                 try {{
                     micStream = stream;
@@ -612,8 +607,8 @@ with tab_voice:
                 wStr(8, 'WAVE');
                 wStr(12, 'fmt ');
                 view.setUint32(16, 16, true);
-                view.setUint16(20, 1, true); // PCM
-                view.setUint16(22, 1, true); // Mono
+                view.setUint16(20, 1, true);
+                view.setUint16(22, 1, true);
                 view.setUint32(24, sRate, true);
                 view.setUint32(28, sRate * 2, true);
                 view.setUint16(32, 2, true);
@@ -629,18 +624,11 @@ with tab_voice:
                 return new Blob([view], {{ type: 'audio/wav' }});
             }}
 
-            // ───────────────────────────────────────────────────
-            // Speech Recognition Setup (Wake Word Detection)
-            // ───────────────────────────────────────────────────
             var recognition = null;
             var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
             function startRecognition() {{
-                if (!SpeechRec) {{
-                    document.getElementById('status_text').innerHTML =
-                        '⚠️ <strong>ब्राउज़र में Web Speech उपलब्ध नहीं है — कृपया Chrome इस्तेमाल करें</strong>';
-                    return;
-                }}
+                if (!SpeechRec) return;
                 if (recognition) {{
                     try {{ recognition.abort(); }} catch(e) {{}}
                 }}
@@ -648,11 +636,7 @@ with tab_voice:
                 recognition = new SpeechRec();
                 recognition.continuous = true;
                 recognition.interimResults = true;
-                recognition.lang = 'hi-IN';
-
-                recognition.onstart = function() {{
-                    console.log('[Vyapaar Soundbox] Mic listening for wake word...');
-                }};
+                recognition.lang = isEnglish ? 'en-IN' : 'hi-IN';
 
                 recognition.onresult = function(event) {{
                     if (isPlaying || isProcessing) return;
@@ -664,16 +648,14 @@ with tab_voice:
                     var text = fullInterim.trim();
                     if (!text) return;
 
-                    // Check for wake word
                     if (!wakeDetected) {{
                         if (WAKE_REGEX.test(text)) {{
-                            // ── INSTANT WAKE-UP ──
                             wakeDetected = true;
                             startWavRecording();
 
                             document.getElementById('dot').className = 'pulse-dot wake-triggered';
                             document.getElementById('status_text').innerHTML =
-                                '⚡ <strong>\"हे मुनीमजी\" सक्रिय — सुन रहे हैं (Sarvam AI)...</strong>';
+                                '⚡ <strong>' + (isEnglish ? '"Hey Munimji" Active — Listening (Sarvam AI)...' : '"हे मुनीमजी" सक्रिय — सुन रहे हैं (Sarvam AI)...') + '</strong>';
                             document.getElementById('transcript_display').innerHTML =
                                 '🗣️ <strong style="color:#0084c7;">' + text + '</strong>';
 
@@ -686,9 +668,7 @@ with tab_voice:
                                 }}
                             }}, 1600);
                         }}
-                        // Standby mode: ignores room chatter
                     }} else {{
-                        // ── WAKE ALREADY ACTIVE — ACCUMULATE COMMAND ──
                         activeCommandText = text;
                         document.getElementById('transcript_display').innerHTML =
                             '🗣️ <strong style="color:#0084c7;">' + activeCommandText + '</strong>';
@@ -702,16 +682,7 @@ with tab_voice:
                     }}
                 }};
 
-                recognition.onerror = function(e) {{
-                    console.warn('[Soundbox Mic Notice]', e.error);
-                    if (e.error === 'not-allowed') {{
-                        document.getElementById('status_text').innerHTML =
-                            '⚠️ <strong>माइक की अनुमति नहीं मिली &bull; ऊपर URL बार में माइक आइकॉन पर क्लिक करके Allow करें</strong>';
-                    }}
-                }};
-
                 recognition.onend = function() {{
-                    // Auto-restart if we are still in standby and not playing audio
                     if (!isPlaying && !isProcessing) {{
                         setTimeout(function() {{
                             try {{ recognition.start(); }} catch(e) {{}}
@@ -721,9 +692,7 @@ with tab_voice:
 
                 try {{
                     recognition.start();
-                }} catch(e) {{
-                    console.warn('Recognition start error:', e);
-                }}
+                }} catch(e) {{}}
             }}
 
             function commitCommand() {{
@@ -734,25 +703,21 @@ with tab_voice:
                 executeVoiceCommand(cmd, wavBlob);
             }}
 
-            // ───────────────────────────────────────────────────
-            // Execute voice command → /api/process-voice
-            // ───────────────────────────────────────────────────
             function executeVoiceCommand(text, wavBlob) {{
                 if (isProcessing || isPlaying) return;
                 isProcessing = true;
                 wakeDetected = false;
                 if (silenceTimer) clearTimeout(silenceTimer);
 
-                // MUTE MIC: Stop recognition so speaker audio is never heard
                 isPlaying = true;
                 if (recognition) {{
                     try {{ recognition.stop(); }} catch(e) {{}}
                 }}
 
                 document.getElementById('status_text').innerHTML =
-                    '⏳ <strong>साउंडबॉक्स हिसाब जोड़ रहा है (Sarvam AI)...</strong>';
+                    '⏳ <strong>' + (isEnglish ? 'Soundbox is calculating ledger (Sarvam AI)...' : 'साउंडबॉक्स हिसाब जोड़ रहा है (Sarvam AI)...') + '</strong>';
                 document.getElementById('transcript_display').innerHTML =
-                    '⏳ <em>प्रोसेस हो रहा है: \"' + text + '\"</em>';
+                    '⏳ <em>' + (isEnglish ? 'Processing: "' : 'प्रोसेस हो रहा है: "') + text + '"</em>';
 
                 var formData = new FormData();
                 formData.append('raw_text_input', text);
@@ -763,15 +728,13 @@ with tab_voice:
                 var endpoints = [
                     'http://127.0.0.1:8000/api/process-voice',
                     backendUrl + '/api/process-voice',
-                    'http://localhost:8000/api/process-voice',
-                    'http://127.0.0.1:8001/api/process-voice',
-                    'http://localhost:8001/api/process-voice'
+                    'http://localhost:8000/api/process-voice'
                 ];
 
                 function tryFetch(i) {{
                     if (i >= endpoints.length) {{
                         document.getElementById('status_text').innerHTML =
-                            '⚠️ <strong>बैकएंड से संपर्क नहीं हो सका — port 8000/8001 चेक करें</strong>';
+                            '⚠️ <strong>' + (isEnglish ? 'Unable to contact backend' : 'बैकएंड से संपर्क नहीं हो सका') + '</strong>';
                         setTimeout(resetStandby, 3000);
                         return;
                     }}
@@ -781,16 +744,15 @@ with tab_voice:
                         return res.json();
                     }})
                     .then(function(data) {{
-                        var respText = data.audio_response_text || 'निर्देश दर्ज हुआ';
+                        var respText = data.audio_response_text || (isEnglish ? 'Instruction recorded' : 'निर्देश दर्ज हुआ');
                         document.getElementById('status_text').innerHTML =
-                            '🔊 <strong>साउंडबॉक्स (Sarvam Bulbul) बोल रहा है...</strong>';
+                            '🔊 <strong>' + (isEnglish ? 'Soundbox (Sarvam Bulbul) speaking...' : 'साउंडबॉक्स (Sarvam Bulbul) बोल रहा है...') + '</strong>';
                         document.getElementById('transcript_display').innerHTML =
-                            '✅ <strong>साउंडबॉक्स:</strong> ' + respText;
+                            '✅ <strong>' + (isEnglish ? 'Soundbox:' : 'साउंडबॉक्स:') + '</strong> ' + respText;
 
                         if (data.audio_base64) {{
                             var snd = new Audio('data:audio/mp3;base64,' + data.audio_base64);
                             snd.onended = function() {{
-                                // 600ms buffer after audio finishes before restarting mic
                                 setTimeout(resetStandby, 600);
                             }};
                             snd.onerror = function() {{ resetStandby(); }};
@@ -800,16 +762,12 @@ with tab_voice:
                         }}
                     }})
                     .catch(function(err) {{
-                        console.log('Endpoint ' + endpoints[i] + ' failed:', err);
                         tryFetch(i + 1);
                     }});
                 }}
                 tryFetch(0);
             }}
 
-            // ───────────────────────────────────────────────────
-            // Reset to standby, restart listen loop
-            // ───────────────────────────────────────────────────
             function resetStandby() {{
                 isProcessing = false;
                 wakeDetected = false;
@@ -817,11 +775,12 @@ with tab_voice:
 
                 document.getElementById('dot').className = 'pulse-dot';
                 document.getElementById('status_text').innerHTML =
-                    '🟢 <strong>साउंडबॉक्स हमेशा सुन रहा है (Always-On) • बोलें: &ldquo;हे मुनीमजी&rdquo; या &ldquo;नमस्ते मुनीमजी&rdquo;</strong>';
+                    isEnglish ? '🟢 <strong>Soundbox is continuously listening (Always-On) • Say: &ldquo;Hey Munimji&rdquo;</strong>' :
+                                '🟢 <strong>साउंडबॉक्स हमेशा सुन रहा है (Always-On) • बोलें: &ldquo;हे मुनीमजी&rdquo; या &ldquo;नमस्ते मुनीमजी&rdquo;</strong>';
                 document.getElementById('transcript_display').innerHTML =
-                    '🎙️ <em>साउंडबॉक्स काउंटर पर हमेशा सुन रहा है। बिना कोई बटन दबाए सीधे बोलें: <strong>\"हे मुनीमजी\"</strong></em>';
+                    isEnglish ? '🎙️ <em>Soundbox is continuously listening. Speak hands-free: <strong>"Hey Munimji"</strong></em>' :
+                                '🎙️ <em>साउंडबॉक्स काउंटर पर हमेशा सुन रहा है। बिना कोई बटन दबाए सीधे बोलें: <strong>"हे मुनीमजी"</strong></em>';
 
-                // Re-enable microphone and start recognition
                 setTimeout(function() {{
                     isPlaying = false;
                     isProcessing = false;
@@ -829,7 +788,6 @@ with tab_voice:
                 }}, 400);
             }}
 
-            // Request mic permission on page load and start listening
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {{
                 navigator.mediaDevices.getUserMedia({{ audio: true }})
                 .then(function(stream) {{
@@ -837,7 +795,6 @@ with tab_voice:
                     startRecognition();
                 }})
                 .catch(function(err) {{
-                    console.warn('getUserMedia notice:', err);
                     startRecognition();
                 }});
             }} else {{
@@ -851,59 +808,62 @@ with tab_voice:
 
     v1, v2 = st.columns([1.1, 1.2])
     with v1:
-        st.markdown(r"""
+        st.markdown(f"""
         <div class="soundbox-container">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div class="soundbox-logo">paytm <span>SOUNDBOX</span></div>
-                <div><span class="soundbox-led"></span> <span style="font-size: 0.72rem; color: #a7f3d0; font-weight: 700;">काउंटर माइक एक्टिव</span></div>
+                <div><span class="soundbox-led"></span> <span style="font-size: 0.72rem; color: #a7f3d0; font-weight: 700;">{T('काउंटर माइक एक्टिव', 'COUNTER MIC ACTIVE')}</span></div>
             </div>
             <div class="soundbox-grille"></div>
             <div style="font-size: 0.85rem; color: #cbd5e1;">
-                दुकान का साउंडबॉक्स &bull; वेक-वर्ड "नमस्ते मुनीमजी" पर सक्रिय
+                {T('दुकान का साउंडबॉक्स &bull; वेक-वर्ड "नमस्ते मुनीमजी" पर सक्रिय', 'Countertop Soundbox &bull; Activated on wake-word "Hey Munimji"')}
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("#### 🎤 1. माइक दबाकर बोलें:")
-        mic_audio = st.audio_input("काउंटर पर बोलने के लिए माइक बटन दबाएं:")
+        st.markdown(f"#### {T('🎤 1. माइक दबाकर बोलें:', '🎤 1. Click Mic & Speak:')}")
+        mic_audio = st.audio_input(T("काउंटर पर बोलने के लिए माइक बटन दबाएं:", "Click the microphone button to record counter speech:"))
         if mic_audio is not None:
             st.audio(mic_audio)
-            if st.button("⚡ मेरी आवाज़ से हिसाब चढ़ाओ", type="primary"):
-                with st.spinner("साउंडबॉक्स आवाज़ प्रोसेस कर रहा है..."):
+            if st.button(T("⚡ मेरी आवाज़ से हिसाब चढ़ाओ", "⚡ Process Spoken Voice Entry"), type="primary"):
+                with st.spinner(T("साउंडबॉक्स आवाज़ प्रोसेस कर रहा है...", "Soundbox processing voice input...")):
                     try:
                         files = {"file": ("direct_mic_recording.wav", mic_audio.getvalue(), "audio/wav")}
                         r = requests.post(f"{BACKEND_URL}/api/process-voice", files=files, timeout=20)
                         if r.status_code == 200:
                             st.session_state["real_voice_result"] = r.json()
-                            st.success("✅ बही-खाता अपडेट हो गया!")
+                            st.success(T("✅ बही-खाता अपडेट हो गया!", "✅ Ledger updated successfully!"))
                             time.sleep(0.5)
                             st.rerun()
                         else:
-                            st.error(f"त्रुटि: {r.text}")
+                            st.error(f"Error: {r.text}")
                     except Exception as e:
-                        st.error(f"बैकएंड कनेक्शन समस्या: {e}")
+                        st.error(f"Backend error: {e}")
 
         st.markdown("---")
-        st.markdown("#### ⌨️ या लिखकर निर्देश दें:")
-        typed_voice = st.text_input("यहाँ लिखें (वेक-वर्ड के साथ या बिना):", placeholder="उदा: नमस्ते मुनीमजी, शर्मा जी का 850 रुपये उधार लिख लो")
-        if st.button("📝 हिसाब दर्ज करें", key="btn_dukaan_typed_main"):
+        st.markdown(f"#### {T('⌨️ या लिखकर निर्देश दें:', '⌨️ Or Type Voice Instruction:')}")
+        typed_voice = st.text_input(
+            T("यहाँ लिखें (वेक-वर्ड के साथ या बिना):", "Type instruction (with or without wake-word):"),
+            placeholder=T("उदा: नमस्ते मुनीमजी, शर्मा जी का 850 रुपये उधार लिख लो", "e.g.: Hey Munimji, record 850 rupees credit for Sharma ji")
+        )
+        if st.button(T("📝 हिसाब दर्ज करें", "📝 Record Entry"), key="btn_dukaan_typed_main"):
             if typed_voice:
-                with st.spinner("दर्ज किया जा रहा है..."):
+                with st.spinner(T("दर्ज किया जा रहा है...", "Recording instruction...")):
                     r = requests.post(f"{BACKEND_URL}/api/process-voice", data={"raw_text_input": typed_voice})
                     if r.status_code == 200:
                         st.session_state["real_voice_result"] = r.json()
-                        st.success("✅ दर्ज हो गया!")
+                        st.success(T("✅ दर्ज हो गया!", "✅ Recorded successfully!"))
                         time.sleep(0.5)
                         st.rerun()
 
     with v2:
-        st.markdown("#### 📢 साउंडबॉक्स वॉइस मॉनिटर & लाइव रिस्पांस")
+        st.markdown(f"#### {T('📢 साउंडबॉक्स वॉइस मॉनिटर & लाइव रिस्पांस', '📢 Soundbox Voice Monitor & Live Audio Response')}")
         if "real_voice_result" in st.session_state:
             res = st.session_state["real_voice_result"]
             if res.get("wake_word_detected"):
-                st.markdown("<span class='guardrail-tag' style='background: #dcfce7; color: #15803d; border-color: #86efac;'>🟢 वेक-वर्ड पहचाना गया</span>", unsafe_allow_html=True)
-            st.info(f"🗣️ **पहचाना गया निर्देश:** {res.get('transcript', '')}")
-            st.success(f"🔊 **साउंडबॉक्स (Sarvam Bulbul):** {res.get('audio_response_text', '')}")
+                st.markdown(f"<span class='guardrail-tag' style='background: #dcfce7; color: #15803d; border-color: #86efac;'>🟢 {T('वेक-वर्ड पहचाना गया', 'Wake-Word Detected')}</span>", unsafe_allow_html=True)
+            st.info(f"🗣️ **{T('पहचाना गया निर्देश:', 'Recognized Speech:')}** {res.get('transcript', '')}")
+            st.success(f"🔊 **{T('साउंडबॉक्स (Sarvam Bulbul):', 'Soundbox Spoken Hindi (Sarvam Bulbul):')}** {res.get('audio_response_text', '')}")
             
             b64_audio = res.get("audio_base64")
             if b64_audio:
@@ -911,16 +871,15 @@ with tab_voice:
                 st.audio(audio_bytes, format="audio/mp3")
 
             if res.get("action_taken"):
-                st.caption(f"⚙️ **दर्ज कार्यवाही:** {res.get('action_taken')}")
+                st.caption(f"⚙️ **{T('दर्ज कार्यवाही:', 'Action Logged:')}** {res.get('action_taken')}")
         else:
-            st.markdown("""
+            st.markdown(f"""
             <div style="background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 12px; padding: 24px 20px; text-align: center;">
                 <div style="font-size: 2.2rem; margin-bottom: 8px;">🎙️</div>
-                <strong style="color: #1e293b; font-size: 1.05rem;">साउंडबॉक्स लाइव सुन रहा है (Hands-Free Active)</strong>
+                <strong style="color: #1e293b; font-size: 1.05rem;">{T('साउंडबॉक्स लाइव सुन रहा है (Hands-Free Active)', 'Soundbox is Live & Listening (Hands-Free Active)')}</strong>
                 <p style="color: #64748b; font-size: 0.88rem; margin-top: 8px; line-height: 1.6;">
-                    काउंटर पर बिना कोई बटन दबाए सीधे बोलें:<br>
-                    <strong style="color: #0284c7;">"हे मुनीमजी, सुरेश शर्मा जी के 1000 रुपये उधार लिखो जो वो 20 सितंबर को देंगे"</strong><br>
-                    या <strong style="color: #0284c7;">"हे मुनीमजी, अमूल दूध के 20 पैकेट आर्डर डाल दो"</strong>
+                    {T('काउंटर पर बिना कोई बटन दबाए सीधे बोलें:<br><strong style="color: #0284c7;">"हे मुनीमजी, सुरेश शर्मा जी के 1000 रुपये उधार लिखो जो वो 20 सितंबर को देंगे"</strong><br>या <strong style="color: #0284c7;">"हे मुनीमजी, अमूल दूध के 20 पैकेट आर्डर डाल दो"</strong>',
+                       'Speak naturally to the counter without clicking any buttons:<br><strong style="color: #0284c7;">"Hey Munimji, add ₹1000 credit for Suresh Sharma due on 20th Sept"</strong><br>or <strong style="color: #0284c7;">"Hey Munimji, order 20 packets of Amul Milk"</strong>')}
                 </p>
                 <div style="margin-top: 12px;">
                     <span style="background: #e0f2fe; color: #0369a1; padding: 4px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: 700;">
@@ -934,24 +893,25 @@ with tab_voice:
 # DUKAAN TAB 2: KHATA BAHI (CUSTOMER UDHAAR RECOVERY)
 # --------------------------------------------------------------------------
 with tab_khata:
-    st.markdown("### 📒 ग्राहकों का उधार खाता (उगाही और हिसाब)")
-    st.caption("कागज़ की डायरी की जगह डिजिटल खाता बही: 1-क्लिक में पैसे वसूलें या WhatsApp पर तकादा संदेश भेजें।")
+    st.markdown(f"### {T('📒 ग्राहकों का उधार खाता (उगाही और हिसाब)', '📒 Customer Udhaar Ledger (Debt Recovery & Accounting)')}")
+    st.caption(T("कागज़ की डायरी की जगह डिजिटल खाता बही: 1-क्लिक में पैसे वसूलें या WhatsApp पर तकादा संदेश भेजें।", "Digital ledger replacing paper diaries: 1-click debt collection or automated WhatsApp audio payment reminders."))
 
     k_col1, k_col2 = st.columns([2, 1.2])
     with k_col1:
-        st.markdown(f"#### 👥 कुल उधार ग्राहक: **{len(live_state.get('customers_udhaar', []))}**")
+        st.markdown(f"#### {T(f'👥 कुल उधार ग्राहक: **{len(live_state.get("customers_udhaar", []))}**', f'👥 Total Borrowers: **{len(live_state.get("customers_udhaar", []))}**')}")
         
         if live_state.get("customers_udhaar"):
             for cust in live_state["customers_udhaar"]:
-                c_name = cust.get("customer_name") or cust.get("name", "ग्राहक")
+                c_name = cust.get("customer_name") or cust.get("name", "Customer")
                 c_amt = cust.get("amount") if cust.get("amount") is not None else cust.get("total_due", 0.0)
                 c_phone = cust.get("phone", "+91 98765 00000")
                 c_id = cust.get("id", "")
-                items_raw = cust.get("items", "किराना सामान")
+                items_raw = cust.get("items", "Kirana items")
                 items_str = ", ".join(items_raw) if isinstance(items_raw, list) else str(items_raw)
-                last_tx = cust.get("last_reminded") or cust.get("created_at") or cust.get("last_transaction", "हाल ही में")
+                last_tx = cust.get("last_reminded") or cust.get("created_at") or cust.get("last_transaction", T("हाल ही में", "Recent"))
                 due_date_str = cust.get("due_date")
-                due_badge = f'<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">📅 देय तारीख: {due_date_str}</span>' if due_date_str and due_date_str != "Not specified" else ""
+                due_label = T("📅 देय तारीख:", "📅 Due Date:")
+                due_badge = f'<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">{due_label} {due_date_str}</span>' if due_date_str and due_date_str != "Not specified" else ""
 
                 c_box1, c_box2, c_box3 = st.columns([2.2, 1, 1])
                 with c_box1:
@@ -965,41 +925,41 @@ with tab_khata:
                             📞 {c_phone} &bull; <em>{items_str}</em>
                         </div>
                         <div style="display: flex; gap: 8px; align-items: center; margin-top: 5px; flex-wrap: wrap;">
-                            <span style="font-size: 0.75rem; color: #94a3b8;">अंतिम लेन-देन: {last_tx}</span>
+                            <span style="font-size: 0.75rem; color: #94a3b8;">{T('अंतिम लेन-देन:', 'Last activity:')} {last_tx}</span>
                             {due_badge}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                 with c_box2:
                     st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-                    if st.button("🟢 पैसे मिल गए", key=f"settle_main_{c_id}"):
-                        with st.spinner("खाता चुकता किया जा रहा है..."):
+                    if st.button(T("🟢 पैसे मिल गए", "🟢 Mark Paid"), key=f"settle_main_{c_id}"):
+                        with st.spinner(T("खाता चुकता किया जा रहा है...", "Settling debt account...")):
                             r = requests.post(f"{BACKEND_URL}/api/udhaar/settle", data={"udhaar_id": c_id})
                             if r.status_code == 200:
-                                st.success(f"✅ {c_name} का उधार चुकता हो गया!")
+                                st.success(T(f"✅ {c_name} का उधार चुकता हो गया!", f"✅ Debt settled for {c_name}!"))
                                 time.sleep(0.5)
                                 st.rerun()
                 with c_box3:
                     st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-                    if st.button("📲 तकादा भेजें", key=f"remind_main_{c_id}"):
-                        with st.spinner("तकादा संदेश भेजा जा रहा है..."):
+                    if st.button(T("📲 तकादा भेजें", "📲 Send Reminder"), key=f"remind_main_{c_id}"):
+                        with st.spinner(T("तकादा संदेश भेजा जा रहा है...", "Sending WhatsApp voice reminder...")):
                             r = requests.post(f"{BACKEND_URL}/api/process-voice", data={"raw_text_input": f"{c_name} को व्हाट्सएप पर तकादा संदेश भेजो"})
                             if r.status_code == 200:
-                                st.success("✅ तकादा भेज दिया!")
+                                st.success(T("✅ तकादा भेज दिया!", "✅ WhatsApp payment reminder dispatched!"))
                                 time.sleep(0.5)
                                 st.rerun()
         else:
-            st.info("वर्तमान में कोई बकाया उधार नहीं है।")
+            st.info(T("वर्तमान में कोई बकाया उधार नहीं है।", "No outstanding customer debts at present."))
 
     with k_col2:
-        st.markdown("#### ➕ नया उधार ग्राहक जोड़ें")
+        st.markdown(f"#### {T('➕ नया उधार ग्राहक जोड़ें', '➕ Add New Customer Udhaar')}")
         with st.form("form_add_udhaar_main"):
-            new_c_name = st.text_input("ग्राहक का नाम", placeholder="उदा: रमेश गुप्ता")
-            new_c_phone = st.text_input("फ़ोन नंबर", placeholder="+91 98111 00000")
-            new_c_amt = st.number_input("उधार राशि (₹)", min_value=10.0, step=50.0, value=250.0)
-            new_c_items = st.text_input("सामान का विवरण", placeholder="उदा: आटा 5kg, सरसों तेल 1L")
+            new_c_name = st.text_input(T("ग्राहक का नाम", "Customer Name"), placeholder=T("उदा: रमेश गुप्ता", "e.g. Ramesh Gupta"))
+            new_c_phone = st.text_input(T("फ़ोन नंबर", "Phone Number"), placeholder="+91 98111 00000")
+            new_c_amt = st.number_input(T("उधार राशि (₹)", "Debt Amount (₹)"), min_value=10.0, step=50.0, value=250.0)
+            new_c_items = st.text_input(T("सामान का विवरण", "Items Description"), placeholder=T("उदा: आटा 5kg, सरसों तेल 1L", "e.g. 5kg Atta, 1L Mustard Oil"))
             
-            submitted = st.form_submit_button("➕ बही-खाते में जोड़ें", type="primary")
+            submitted = st.form_submit_button(T("➕ बही-खाते में जोड़ें", "➕ Ingest into Ledger"), type="primary")
             if submitted:
                 if new_c_name:
                     r = requests.post(f"{BACKEND_URL}/api/udhaar/add", data={
@@ -1009,7 +969,7 @@ with tab_khata:
                         "items": new_c_items
                     })
                     if r.status_code == 200:
-                        st.success("✅ नया उधार दर्ज हुआ!")
+                        st.success(T("✅ नया उधार दर्ज हुआ!", "✅ New customer debt recorded!"))
                         time.sleep(0.5)
                         st.rerun()
 
@@ -1017,33 +977,35 @@ with tab_khata:
 # DUKAAN TAB 3: GALLA & EMERGENCY LOAN (SMART CASH PREDICTION)
 # --------------------------------------------------------------------------
 with tab_loan:
-    st.markdown("### 💰 गल्ला और इमरजेंसी वर्किंग कैपिटल लोन")
-    st.caption("सप्लायर के बड़े बिलों के कारण दुकान का माल न रुके: व्यापार-OS गल्ले की कमी पहले ही भांप लेता है।")
+    st.markdown(f"### {T('💰 गल्ला और इमरजेंसी वर्किंग कैपिटल लोन', '💰 Drawer Cash & Emergency Working Capital Loan')}")
+    st.caption(T("सप्लायर के बड़े बिलों के कारण दुकान का माल न रुके: व्यापार-OS गल्ले की कमी पहले ही भांप लेता है।", "Never run out of distributor stock: Vyapaar-OS anticipates cash deficits before supplier bills fall due."))
 
     cf_data = get_cashflow_data()
     gl_c1, gl_c2 = st.columns([1.2, 1])
 
     with gl_c1:
-        st.markdown("#### 📊 अगले 7 दिनों का गल्ला और खर्चे का अनुमान")
+        st.markdown(f"#### {T('📊 अगले 7 दिनों का गल्ला और खर्चे का अनुमान', '📊 7-Day Predictive Drawer Cashflow Timeline')}")
         if cf_data and cf_data.get("timeline"):
             tdf = pd.DataFrame(cf_data["timeline"])
-            tdf_renamed = tdf.rename(columns={
-                "day": "दिन",
-                "inflow": "बिक्री और वसूली (₹)",
-                "supplier_due": "सप्लायर का भुगतान (₹)",
-                "closing_balance": "गल्ले का शेष (₹)"
-            })
+            col_map = {
+                "day": T("दिन", "Day"),
+                "inflow": T("बिक्री और वसूली (₹)", "Inflow (Sales & Recovery ₹)"),
+                "supplier_due": T("सप्लायर का भुगतान (₹)", "Supplier Due (₹)"),
+                "closing_balance": T("गल्ले का शेष (₹)", "Drawer Closing Balance (₹)")
+            }
+            tdf_renamed = tdf.rename(columns={k: v for k, v in col_map.items() if k in tdf.columns})
             st.dataframe(tdf_renamed, hide_index=True)
 
             if cf_data.get("deficit_predicted"):
-                st.warning(f"⚠️ **गल्ले में कमी की चेतावनी:** **{cf_data['deficit_day']}** को सप्लायर को देने के लिए **₹{cf_data['deficit_amount']:,.0f}** कम पड़ सकते हैं!")
+                st.warning(T(f"⚠️ **गल्ले में कमी की चेतावनी:** **{cf_data['deficit_day']}** को सप्लायर को देने के लिए **₹{cf_data['deficit_amount']:,.0f}** कम पड़ सकते हैं!",
+                             f"⚠️ **Working Capital Deficit Alert:** Anticipated shortage of **₹{cf_data['deficit_amount']:,.0f}** on **{cf_data['deficit_day']}** for supplier dues!"))
             else:
-                st.success("✅ गल्ले में पर्याप्त नकदी उपलब्ध है।")
+                st.success(T("✅ गल्ले में पर्याप्त नकदी उपलब्ध है।", "✅ Sufficient working capital available in drawer."))
         else:
-            st.info("कैश फ्लो डेटा लोड हो रहा है...")
+            st.info(T("कैश फ्लो डेटा लोड हो रहा है...", "Loading cashflow timeline..."))
 
     with gl_c2:
-        st.markdown("#### ⚡ 1-क्लिक इमरजेंसी गल्ला सपोर्ट")
+        st.markdown(f"#### {T('⚡ 1-क्लिक इमरजेंसी गल्ला सपोर्ट', '⚡ 1-Click Instant Working Capital Support')}")
         active_loan = live_state.get("active_loan")
         loan_offer = cf_data.get("smart_micro_lending") if cf_data else None
 
@@ -1051,15 +1013,15 @@ with tab_loan:
             st.markdown(f"""
             <div class="loan-phone-card" style="border-color: #10b981; background: #f0fdf4;">
                 <div style="font-size: 2.2rem;">✅</div>
-                <h3 style="margin: 4px 0 0 0; color: #047857;">लोन गल्ले में जुड़ चुका है</h3>
+                <h3 style="margin: 4px 0 0 0; color: #047857;">{T('लोन गल्ले में जुड़ चुका है', 'Loan Disbursed into Drawer')}</h3>
                 <div style="font-size: 1.9rem; font-weight: 800; color: #047857; margin: 10px 0;">₹{active_loan['amount']:,.0f}</div>
                 <p style="font-size: 0.85rem; color: #334155;">
-                    <strong>पार्टनर:</strong> {active_loan.get('lender', 'Paytm Business Finance')}<br>
-                    <strong>रेफरेंस नंबर:</strong> {active_loan.get('ref_id', '#LOAN12345')}<br>
-                    <strong>समय:</strong> {active_loan.get('disbursed_at', 'आज')}
+                    <strong>{T('पार्टनर:', 'Lender:')}</strong> {active_loan.get('lender', 'Paytm Business Finance')}<br>
+                    <strong>{T('रेफरेंस नंबर:', 'Reference #:')}</strong> {active_loan.get('ref_id', '#LOAN12345')}<br>
+                    <strong>{T('समय:', 'Timestamp:')}</strong> {active_loan.get('disbursed_at', T('आज', 'Today'))}
                 </p>
                 <div style="color: #15803d; font-weight: 700; font-size: 0.85rem;">
-                    🛡️ सप्लायर भुगतान सुरक्षित &bull; दुकान का माल नहीं रुकेगा!
+                    {T('🛡️ सप्लायर भुगतान सुरक्षित &bull; दुकान का माल नहीं रुकेगा!', '🛡️ Supplier payments secured &bull; Operations uninterrupted!')}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1068,33 +1030,33 @@ with tab_loan:
             <div class="loan-phone-card">
                 <div style="font-size: 2rem; color: #00b9f1;">✨</div>
                 <div style="font-size: 0.8rem; color: #00b9f1; font-weight: 800; text-transform: uppercase;">Paytm For Business</div>
-                <h3 style="margin: 4px 0 0 0; color: #002e6e;">प्री-अप्रूव्ड वर्किंग कैपिटल लोन</h3>
+                <h3 style="margin: 4px 0 0 0; color: #002e6e;">{T('प्री-अप्रूव्ड वर्किंग कैपिटल लोन', 'Pre-Approved Working Capital Loan')}</h3>
                 <p style="color: #64748b; font-size: 0.85rem; margin-top: 4px;">
-                    सप्लायर भुगतान में कमी को पूरा करने के लिए तुरंत उपलब्ध।
+                    {T('सप्लायर भुगतान में कमी को पूरा करने के लिए तुरंत उपलब्ध।', 'Instantly available to cover upcoming distributor invoice deficits.')}
                 </p>
                 <div style="background: #f8fafc; border-radius: 12px; padding: 14px; margin: 12px 0; text-align: left; border: 1px solid #e2e8f0;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="color: #64748b;">स्वीकृत राशि:</span>
+                        <span style="color: #64748b;">{T('स्वीकृत राशि:', 'Approved Amount:')}</span>
                         <strong style="color: #0f172a; font-size: 1.25rem;">₹{loan_offer['approved_amount']:,.0f}</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="color: #64748b;">पार्टनर बैंक:</span>
+                        <span style="color: #64748b;">{T('पार्टनर बैंक:', 'Lending Partner:')}</span>
                         <strong style="color: #0f172a;">{loan_offer['lender']}</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #64748b;">प्रोसेसिंग:</span>
-                        <strong style="color: #10b981;">तुरंत (0% पेपरवर्क)</strong>
+                        <span style="color: #64748b;">{T('प्रोसेसिंग:', 'Processing:')}</span>
+                        <strong style="color: #10b981;">{T('तुरंत (0% पेपरवर्क)', 'Instant (0% Paperwork)')}</strong>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
             st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-            if st.button("🚀 ₹50,000 अभी गल्ले में ट्रांसफर करें", type="primary", key="btn_drawdown_main"):
-                with st.spinner("Paytm वॉलेट में लोन ट्रांसफर हो रहा है..."):
+            if st.button(T("🚀 ₹50,000 अभी गल्ले में ट्रांसफर करें", "🚀 Disburse ₹50,000 to Drawer Now"), type="primary", key="btn_drawdown_main"):
+                with st.spinner(T("Paytm वॉलेट में लोन ट्रांसफर हो रहा है...", "Transferring loan to drawer via Paytm rails...")):
                     r = requests.post(f"{BACKEND_URL}/api/loan/drawdown")
                     if r.status_code == 200:
-                        st.success("🎉 ₹50,000 आपके गल्ले में सफलतापूर्वक जुड़ गए!")
+                        st.success(T("🎉 ₹50,000 आपके गल्ले में सफलतापूर्वक जुड़ गए!", "🎉 ₹50,000 disbursed to drawer cash!"))
                         time.sleep(0.5)
                         st.rerun()
 
@@ -1102,12 +1064,12 @@ with tab_loan:
 # DUKAAN TAB 4: STOCK & RESTOCK ORDERS
 # --------------------------------------------------------------------------
 with tab_stock:
-    st.markdown("### 📦 दुकान का सामान और सप्लायर आर्डर")
-    st.caption("सामान खत्म होने से पहले ही आर्डर करें ताकि ग्राहक खाली हाथ न लौटे।")
+    st.markdown(f"### {T('📦 दुकान का सामान और सप्लायर आर्डर', '📦 Kirana Inventory & Supplier Restock Orders')}")
+    st.caption(T("सामान खत्म होने से पहले ही आर्डर करें ताकि ग्राहक खाली हाथ न लौटे।", "Reorder before stockouts occur so customers never return empty-handed."))
 
     st_c1, st_c2 = st.columns([1.5, 1])
     with st_c1:
-        st.markdown("#### 🛒 किराना सामान स्थिति (इन्वेंट्री):")
+        st.markdown(f"#### {T('🛒 किराना सामान स्थिति (इन्वेंट्री):', '🛒 Kirana Inventory Status:')}")
         if live_state.get("inventory"):
             inv_items = live_state["inventory"]
             for idx, item in enumerate(inv_items):
@@ -1118,7 +1080,7 @@ with tab_stock:
                 unit = item.get("unit", "यूनिट")
                 status_raw = item.get("status", "HEALTHY")
                 is_low = status_raw in ["LOW_STOCK", "CRITICAL_LOW", "LOW"] or curr_stock <= min_thresh
-                status_badge = "🔴 कम है (Low)" if is_low else "🟢 पर्याप्त (OK)"
+                status_badge = T("🔴 कम है (Low)", "🔴 Low Stock") if is_low else T("🟢 पर्याप्त (OK)", "🟢 In Stock")
 
                 i_col1, i_col2 = st.columns([2.5, 1.2])
                 with i_col1:
@@ -1129,23 +1091,24 @@ with tab_stock:
                             <span style="font-weight: 700;">{status_badge}</span>
                         </div>
                         <div style="font-size: 0.82rem; color: #64748b; margin-top: 4px;">
-                            वर्तमान स्टॉक: <strong>{curr_stock} {unit}</strong> &bull; न्यूनतम सीमा: {min_thresh} {unit}
+                            {T(f"वर्तमान स्टॉक: <strong>{curr_stock} {unit}</strong> &bull; न्यूनतम सीमा: {min_thresh} {unit}",
+                               f"Current Stock: <strong>{curr_stock} {unit}</strong> &bull; Min Threshold: {min_thresh} {unit}")}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                 with i_col2:
                     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
                     if is_low:
-                        if st.button(f"🛒 आर्डर भेजें", key=f"reorder_main_{sku_id}"):
-                            with st.spinner(f"{item_name} का आर्डर भेजा जा रहा है..."):
+                        if st.button(T("🛒 आर्डर भेजें", "🛒 Restock Order"), key=f"reorder_main_{sku_id}"):
+                            with st.spinner(T(f"{item_name} का आर्डर भेजा जा रहा है...", f"Placing restock order for {item_name}...")):
                                 r = requests.post(f"{BACKEND_URL}/api/process-voice", data={"raw_text_input": f"{item_name} 20 पैकेट ऑर्डर डाल दो"})
                                 if r.status_code == 200:
-                                    st.success(f"✅ {item_name} का आर्डर डिस्ट्रीब्यूटर को भेज दिया!")
+                                    st.success(T(f"✅ {item_name} का आर्डर डिस्ट्रीब्यूटर को भेज दिया!", f"✅ Restock order for {item_name} dispatched to distributor!"))
                                     time.sleep(0.5)
                                     st.rerun()
 
     with st_c2:
-        st.markdown("#### 🚚 सप्लायर बिल एवं देय तिथियां:")
+        st.markdown(f"#### {T('🚚 सप्लायर बिल एवं देय तिथियां:', '🚚 Supplier Invoices & Due Dates:')}")
         if live_state.get("supplier_invoices"):
             for inv in live_state["supplier_invoices"]:
                 st.markdown(f"""
@@ -1155,14 +1118,11 @@ with tab_stock:
                         <strong style="color: #dc2626; font-size: 1.05rem;">₹{inv['total_amount']:,.0f}</strong>
                     </div>
                     <div style="font-size: 0.82rem; color: #475569; margin-top: 4px;">
-                        इनवॉइस #: {inv['invoice_id']} &bull; देय: <strong>{inv['due_in_days']} दिन में</strong>
+                        {T(f"इनवॉइस #: {inv['invoice_id']} &bull; देय: <strong>{inv['due_in_days']} दिन में</strong>",
+                           f"Invoice #: {inv['invoice_id']} &bull; Due: <strong>in {inv['due_in_days']} days</strong>")}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-
-# --------------------------------------------------------------------------
-# DUKAAN TAB 5: PARCHI SCANNER
-# --------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
 # TAB 5: PARCHI SCANNER (1-CLICK SARVAM VISION ZERO-UI INGESTION)
@@ -1205,7 +1165,7 @@ with tab_parchi:
                 active_image_filename = 'test_kacha_slip.jpg'
                 st.image('test_kacha_slip.jpg', caption=T('हस्तलिखित किराना पर्ची (Sample Kirana Slip)', 'Handwritten Kirana Slip (Sample)'), use_container_width=True)
             else:
-                st.warning('test_kacha_slip.jpg not found.')
+                st.warning(T('test_kacha_slip.jpg फ़ाइल नहीं मिली।', 'test_kacha_slip.jpg file not found.'))
 
         # 1-CLICK ACTION BUTTON - NO CONFUSING BUTTONS, NO EXPLANATION ASKED!
         st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
@@ -1243,19 +1203,17 @@ with tab_parchi:
                 T('पर्ची का पाठ (Slip Text):', 'Slip Text:'),
                 value=st.session_state.get('extracted_raw_text', ''),
                 height=110,
-                placeholder=T('उदा:\n1. सुरेश शर्मा - 2 पैकेट तेल = ₹850\n2. पूजा वर्मा - 10kg आटा = ₹620\n3. ढाबा अनिल = ₹1200',
-                              'e.g.:\n1. Suresh Sharma - 2x Oil = ₹850\n2. Pooja Verma - 10kg Atta = ₹620\n3. Dhaba Anil = ₹1200'),
+                placeholder=T("उदा:\n1. सुरेश शर्मा - 2 पैकेट तेल = ₹850\n2. पूजा वर्मा - 10kg आटा = ₹620\n3. ढाबा अनिल = ₹1200",
+                              "e.g.:\n1. Suresh Sharma - 2x Oil = ₹850\n2. Pooja Verma - 10kg Atta = ₹620\n3. Dhaba Anil = ₹1200"),
                 key='input_fallback_slip_text'
             )
             if st.button(T('⚡ इस पाठ से खाता अपडेट करें', '⚡ Update Ledger from This Text'), key='btn_update_from_text', type='secondary', use_container_width=True):
-                # Retrieve the most current text from session state or widget variable
                 text_to_process = st.session_state.get('input_fallback_slip_text') or fallback_text or ''
                 text_to_process = text_to_process.strip()
                 if text_to_process and len(text_to_process) >= 2:
                     st.session_state['open_slip_text_editor'] = True
                     with st.spinner(T('खाता बही में दर्ज हो रहा है...', 'Updating store ledger...')):
                         try:
-                            # Dynamic backend port lookup to always target active backend
                             active_url = _find_backend_url()
                             r = requests.post(f"{active_url}/api/process-slip", data={'raw_text_input': text_to_process}, timeout=25)
                             if r.status_code == 200:
@@ -1278,7 +1236,6 @@ with tab_parchi:
             s_res = st.session_state['slip_result']
             st.success(f"✅ {s_res.get('action_status', T('हिसाब दर्ज हुआ', 'Debts Ingested'))}")
             
-            # Detected raw text
             raw_detected = s_res.get('raw_text', '')
             if raw_detected:
                 with st.expander(T('👁️ सरवम एआई द्वारा पढ़ा गया मूल पाठ (Detected Text)', '👁️ Original Text Detected by Sarvam AI'), expanded=True):
