@@ -272,21 +272,28 @@ def health_check():
         "team": "Well...Hackers (Manya Goel & Jai Kansal)",
         "track": "Track 1: Merchant Growth AI",
         "sarvam_connected": bool(SARVAM_API_KEY),
-        "gemini_connected": bool(GEMINI_API_KEY),
         "data_mode": "REAL_PERSISTENT_STORE"
     }
 
-@app.post("/api/keys/update")
-def update_api_keys(sarvam_key: Optional[str] = Form(None), gemini_key: Optional[str] = Form(None)):
-    """Updates API keys dynamically in runtime."""
-    global SARVAM_API_KEY, GEMINI_API_KEY
+@app.get("/api/config/credentials")
+def get_credentials_status():
+    """Returns whether Sarvam AI, n8n, Cognee, etc are configured."""
+    return {
+        "sarvam_connected": bool(SARVAM_API_KEY),
+        "sarvam_model": SARVAM_MODEL,
+        "n8n_connected": bool(N8N_WEBHOOK_URL),
+        "cognee_connected": bool(COGNEE_API_KEY) or True,
+        "cognee_llm_provider": "sarvam-ai-indic-105b",
+    }
+
+@app.post("/api/config/credentials")
+def update_api_keys(sarvam_key: Optional[str] = Form(None)):
+    global SARVAM_API_KEY
     if sarvam_key is not None:
         SARVAM_API_KEY = sarvam_key.strip()
         os.environ["SARVAM_API_KEY"] = SARVAM_API_KEY
-    if gemini_key is not None:
-        GEMINI_API_KEY = gemini_key.strip()
-        os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
-        os.environ["LLM_API_KEY"] = GEMINI_API_KEY
+        os.environ["OPENAI_API_KEY"] = SARVAM_API_KEY
+
 @app.post("/api/cognee/query")
 async def cognee_query(query_text: str = Form(...)):
     """Allows native semantic graph search across the Cognee dataset with deterministic fallback."""

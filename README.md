@@ -120,7 +120,7 @@ vyapaar-os/
 ├── vyapaar_n8n_workflow.json    # n8n Cloud Pro blueprint export (Dual-route switch + instant 200 response)
 ├── vyapaar_live_qr.png          # High-resolution scannable mobile deployment QR code
 ├── requirements.txt             # Production Python dependencies
-├── .env                         # Environment credentials (Sarvam, Gemini, n8n, Cognee)
+├── .env                         # Environment credentials (Sarvam AI, n8n, Cognee)
 └── .streamlit/
     └── config.toml              # Theme tokens & minimal toolbar configuration
 ```
@@ -162,11 +162,10 @@ pip install -r requirements.txt
 ```
 
 ### 2. Environment Configuration
-Inspect or update `.env` in the root directory:
+Inspect or update `.env` in the root directory (all AI perception & Cognee graph memory are powered by **Sarvam AI**):
 ```env
 SARVAM_API_KEY="your_sarvam_api_key"
 SARVAM_MODEL="sarvam-105b-conversations"
-GEMINI_API_KEY="your_gemini_api_key"
 N8N_WEBHOOK_URL="https://your-workspace.app.n8n.cloud/webhook/trigger"
 COGNEE_API_KEY="your_cognee_api_key"
 ```
