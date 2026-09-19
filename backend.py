@@ -126,6 +126,75 @@ def call_sarvam_llm(user_prompt: str, system_prompt: Optional[str] = None, model
     return None
 
 
+def parse_voice_with_sarvam_ai(transcript: str, store_state: dict = None) -> dict:
+    """
+    Uses Sarvam Indic LLM (sarvam-105b-conversations) to understand natural shopkeeper speech
+    and extract structured entities without any brittle hardcoded keywords.
+    """
+    system_prompt = """You are the AI brain for Vyapaar-OS, an autonomous Indian Kirana Store Munimji (Soundbox assistant).
+Analyze the shopkeeper's spoken instruction in Hindi, Hinglish, or English.
+Classify the intent and extract all structured entities accurately.
+
+Supported Intents:
+1. "RECORD_UDHAAR": Shopkeeper is recording customer credit/debt/purchase on khata (e.g. "मान्य गोयल के खाते में हज़ार रुपये लिखो", "सुरेश का 500 उधार लिख लो", "शर्मा जी को 200 का आटा दिया").
+2. "RESTOCK_SUPPLIER": Shopkeeper wants to order or restock grocery/inventory items (e.g. "अमूल दूध के 20 पैकेट आर्डर कर दो", "आटा खत्म हो गया मंगवा लो", "order 20 packets milk").
+3. "SETTLE_UDHAAR": Customer paid back their debt / clear customer balance (e.g. "सुरेश ने पैसे दे दिए", "शर्मा जी का खाता चुकता कर दो", "पैसे मिल गए").
+4. "RECOVER_UDHAAR": Shopkeeper wants to send a reminder or WhatsApp note to a debtor (e.g. "अनिल ढाबा को तकादा भेजो", "रमेश को व्हाट्सएप पर याद दिलाओ").
+5. "CHECK_CASHFLOW": Shopkeeper is asking about drawer cash, money in galla, loan, or supplier due deadlines (e.g. "गल्ले में कितना कैश है", "पैसा कितना बचा है", "लोन का बताओ").
+6. "STORE_UPDATE": General business note, reminder, or memo.
+
+Return ONLY a valid JSON object without any Markdown formatting or backticks:
+{
+  "intent": "RECORD_UDHAAR" | "RESTOCK_SUPPLIER" | "SETTLE_UDHAAR" | "RECOVER_UDHAAR" | "CHECK_CASHFLOW" | "STORE_UPDATE",
+  "customer_name": "Full name of customer or null",
+  "amount": 0.0,
+  "due_date": "Return/promise date or null",
+  "items": "Grocery items description or null",
+  "quantity": 0,
+  "sku": "SKU-AMUL-01" | "SKU-AASH-02" | "SKU-FORT-03" | "SKU-MDH-04" | "SKU-SURF-05" | null,
+  "voice_response": "Warm, natural, polite Indic Hindi spoken response confirming the action taken"
+}"""
+
+    raw_response = call_sarvam_llm(transcript, system_prompt=system_prompt)
+    if raw_response:
+        try:
+            clean = raw_response.strip()
+            if clean.startswith("```json"): clean = clean[7:]
+            if clean.startswith("```"): clean = clean[3:]
+            if clean.endswith("```"): clean = clean[:-3]
+            parsed = json.loads(clean.strip())
+            if isinstance(parsed, dict) and "intent" in parsed:
+                return parsed
+        except Exception as e:
+            logger.warning(f"Failed to parse Sarvam LLM JSON: {e}")
+
+    # Fallback if Sarvam LLM is unreachable or timed out
+    amt = parse_hindi_amount(transcript)
+    due = extract_due_date(transcript)
+    cust = extract_customer_name(transcript)
+    if amt > 0:
+        return {
+            "intent": "RECORD_UDHAAR",
+            "customer_name": cust,
+            "amount": amt,
+            "due_date": due,
+            "items": "किराना उधार",
+            "quantity": 0,
+            "sku": None,
+            "voice_response": f"ठीक है, {cust} का ₹{amt:,.0f} का हिसाब खाते में लिख दिया गया है।"
+        }
+    return {
+        "intent": "STORE_UPDATE",
+        "customer_name": None,
+        "amount": 0.0,
+        "due_date": None,
+        "items": None,
+        "quantity": 0,
+        "sku": None,
+        "voice_response": f"जी, आपकी बात नोट कर ली गई है: {transcript}"
+    }
+
+
 # --- REAL COGNEE INTEGRATION ---
 async def process_cognee_memory(text_content: str):
     """Indexes actual event or spoken merchant instruction into Cognee knowledge graph."""
@@ -720,49 +789,46 @@ async def process_voice(
             "n8n_status": "Standby"
         }
 
-    # Real entity recognition & database mutation based on speech
+    # Sarvam AI LLM Intent & Entity Extraction (Zero brittle hardcoded keywords)
     eval_text = cleaned_transcript if cleaned_transcript else transcript
-    lower_t = eval_text.lower()
-    intent = "GENERAL"
-    audio_response_text = ""
-    action_desc = ""
+    parsed = parse_voice_with_sarvam_ai(eval_text, db)
 
-    udhaar_kw = [
-        "उधार", "udhaar", "udhar",
-        "लिख", "लिखो", "लिख लीजिए", "लिखिए", "लिख लो", "लिखना", "लिख दो", "लिखदे", "likh", "likho", "likhlo", "likh do",
-        "खाता", "खाते", "khata", "khate",
-        "चढ़ा", "चढ़ाओ", "चढ़ा दो", "चढ़ा लो", "चढ़ाना", "chadha",
-        "जोड़", "जोड़ो", "जोड़ दो", "जोड़ लीजिए",
-        "डाल दो", "दर्ज",
-        "देगी", "देगा", "देंगे", "देना है", "देने हैं", "degi", "dega",
-        "ले गया", "ले गई", "ले गए",
-        "नाम पर", "नाम पे", "nam par", "naam par",
-        "रुपये", "रुपए", "रुपया", "rupee", "rupees", "rs", "₹",
-        "credit", "ledger"
-    ]
-    restock_kw = [
-        "ऑर्डर", "order", "खत्म", "दूध", "मिल्क", "स्टॉक", "आटा", "सर्फ", "तेल", "मिर्च",
-        "restock", "सामान", "मंगवा", "लाओ", "खत्म हो गया"
-    ]
-    settle_kw = [
-        "पैसे मिल गए", "पैसे दे दिए", "वापस आ गए", "जमा कर", "चुकता", "settle", "paid",
-        "पैसा आ गया", "भुगतान", "चुका दिया"
-    ]
-    remind_kw = [
-        "याद", "remind", "व्हाट्सएप", "whatsapp", "पैसे मांग", "मैसेज", "तकादा", "संदेश"
-    ]
-    cashflow_kw = [
-        "गल्ला", "गल्ले", "दुकान में कैश", "गल्ले में कैश", "कैश कितना", "कितना कैश",
-        "हिसाब बताओ", "कैश बैलेंस", "deficit", "cash balance", "drawer balance", "लोन कितना", "लोन बताओ"
-    ]
+    intent = parsed.get("intent", "STORE_UPDATE")
+    customer_name = parsed.get("customer_name") or "ग्राहक"
+    amount = float(parsed.get("amount", 0.0))
+    due_date = parsed.get("due_date")
+    items = parsed.get("items") or "आवाज़ से दर्ज किराना उधार"
+    quantity = int(parsed.get("quantity") or 20)
+    sku = parsed.get("sku")
+    voice_response = parsed.get("voice_response")
 
-    if any(w in lower_t for w in settle_kw):
-        intent = "SETTLE_UDHAAR"
+    if intent == "RECORD_UDHAAR":
+        new_entry = add_udhaar(customer_name, "+91 98765 00000", amount, items, due_date, username=username)
+        action_log = log_and_execute_action(
+            "RECORD_UDHAAR", new_entry,
+            f"Spoken udhaar recorded: {customer_name} owes ₹{amount:,.2f}, due: {due_date or 'unspecified'}",
+            username=username
+        )
+        audio_response_text = voice_response or f"ठीक है, {customer_name} का ₹{amount:,.0f} का उधार खाते में दर्ज कर दिया गया है।"
+        action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
+
+    elif intent == "RESTOCK_SUPPLIER":
+        item_name = items or "अमूल दूध"
+        if not sku:
+            sku = "SKU-AMUL-01" if any(w in item_name.lower() for w in ["दूध", "milk", "amul"]) else "SKU-AASH-02"
+        update_inventory_stock(sku, quantity, username=username)
+        payload = {"item": item_name, "quantity": quantity, "sku": sku}
+        action_log = log_and_execute_action("DISTRIBUTOR_RESTOCK_CALL", payload, f"Restock order placed for {quantity}x {item_name} and inventory updated", username=username)
+        audio_response_text = voice_response or f"{item_name} के {quantity} पैकेट का रीस्टॉक ऑर्डर डिस्ट्रीब्यूटर को n8n के जरिए भेज दिया गया है।"
+        action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
+
+    elif intent == "SETTLE_UDHAAR":
         matched_id = None
-        matched_name = "ग्राहक"
-        matched_amt = 0.0
+        matched_name = customer_name
+        matched_amt = amount
         for u in db.get("customers_udhaar", []):
-            if any(part.lower() in u.get("customer_name", "").lower() for part in eval_text.split() if len(part) > 2):
+            if (customer_name.lower() in u.get("customer_name", "").lower() or 
+                u.get("customer_name", "").lower() in customer_name.lower()):
                 matched_id = u["id"]
                 matched_name = u["customer_name"]
                 matched_amt = u["amount"]
@@ -774,108 +840,36 @@ async def process_voice(
             matched_amt = first_u["amount"]
         if matched_id:
             settle_udhaar(matched_id, username=username)
-            audio_response_text = f"बहुत बढ़िया! {matched_name} का ₹{matched_amt:,.0f} का बकाया खाता चुकता कर दिया गया है और पैसे गल्ले में जुड़ गए हैं।"
             action_log = log_and_execute_action("UDHAAR_SETTLED", {"udhaar_id": matched_id, "customer": matched_name, "amount": matched_amt}, f"Settled udhaar for {matched_name} (+₹{matched_amt:,.0f})", username=username)
+            audio_response_text = voice_response or f"बहुत बढ़िया! {matched_name} का ₹{matched_amt:,.0f} का बकाया खाता चुकता कर दिया गया है।"
         else:
-            audio_response_text = "खाते में कोई बकाया उधार नहीं मिला।"
             action_log = log_and_execute_action("UDHAAR_SETTLE_FAILED", {}, "No matching debtor found", username=username)
+            audio_response_text = "खाते में कोई बकाया उधार नहीं मिला।"
         action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
 
-    elif any(w in lower_t for w in restock_kw):
-        intent = "RESTOCK_SUPPLIER"
-        amounts = re.findall(r'\d+', transcript)
-        qty = int(amounts[0]) if amounts else 20
-        if any(w in lower_t for w in ["दूध", "milk", "amul"]):
-            sku_id = "SKU-AMUL-01"
-            item_name = "Amul Taaza Milk (500ml)"
-            supp = "Goyal Dairy Distributors"
-        elif any(w in lower_t for w in ["आटा", "atta", "aashirvaad"]):
-            sku_id = "SKU-AASH-02"
-            item_name = "Aashirvaad Shudh Chakki Atta (10kg)"
-            supp = "Delhi Grain Merchants Syndicate"
-        elif any(w in lower_t for w in ["तेल", "oil", "fortune"]):
-            sku_id = "SKU-FORT-03"
-            item_name = "Fortune Refined Mustard Oil (1L)"
-            supp = "Delhi Grain Merchants Syndicate"
-        elif any(w in lower_t for w in ["मिर्च", "mirch", "mdh", "मसाला"]):
-            sku_id = "SKU-MDH-04"
-            item_name = "MDH Deggi Mirch (100g)"
-            supp = "Gupta Kirana Wholesalers"
-        else:
-            sku_id = "SKU-SURF-05"
-            item_name = "Surf Excel Quick Wash (1kg)"
-            supp = "HUL City Depot"
-
-        update_inventory_stock(sku_id, qty, username=username)
-        payload = {"item": item_name, "quantity": qty, "supplier": supp, "sku": sku_id}
-        audio_response_text = f"{item_name} के {qty} पैकेट का रीस्टॉक ऑर्डर डिस्ट्रीब्यूटर को n8n के जरिए भेज दिया गया है और दुकान का स्टॉक बढ़ गया है।"
-        action_log = log_and_execute_action("DISTRIBUTOR_RESTOCK_CALL", payload, f"Restock order placed for {qty}x {item_name} and inventory updated", username=username)
-        action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
-
-    elif any(w in lower_t for w in udhaar_kw):
-        intent = "RECORD_UDHAAR"
-        amount = parse_hindi_amount(eval_text)
-        if amount == 0.0:
-            nums = re.findall(r'\d+', eval_text)
-            amount = float(nums[0]) if nums else 500.0
-        due_date = extract_due_date(eval_text)
-        name = extract_customer_name(eval_text)
-        new_entry = add_udhaar(name, "+91 98765 00000", amount, "आवाज़ से दर्ज किराना उधार", due_date, username=username)
-        due_str = f" — वापसी तारीख: {due_date}" if due_date else ""
-        audio_response_text = f"ठीक है, {name} का ₹{amount:,.0f} का उधार खाते में दर्ज कर दिया गया है{due_str}।"
-        action_log = log_and_execute_action(
-            "RECORD_UDHAAR", new_entry,
-            f"Spoken udhaar recorded: {name} owes ₹{amount:,.2f}, due: {due_date or 'unspecified'}",
-            username=username
-        )
-        action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
-
-    elif any(w in lower_t for w in remind_kw):
-        intent = "RECOVER_UDHAAR"
-        target_customer = "अनिल कुमार (ढाबा)"
-        target_amount = 4800.0
+    elif intent == "RECOVER_UDHAAR":
+        target_customer = customer_name or "ग्राहक"
+        target_amount = amount or 1000.0
         for u in db.get("customers_udhaar", []):
-            if "अनिल" in u.get("customer_name", ""):
+            if target_customer.lower() in u.get("customer_name", "").lower():
                 target_amount = u["amount"]
                 target_customer = u["customer_name"]
                 break
-        payload = {"customer": target_customer, "phone": "+91 99223 88441", "amount": target_amount}
-        audio_response_text = f"{target_customer} को {target_amount:,.0f} रुपये का विनम्र व्हाट्सएप ऑडियो नोट भेज दिया गया है।"
+        payload = {"customer": target_customer, "amount": target_amount}
         action_log = log_and_execute_action("WHATSAPP_UDHAAR_REMINDER", payload, f"WhatsApp audio reminder dispatched to {target_customer} for ₹{target_amount:,.2f}", username=username)
+        audio_response_text = voice_response or f"{target_customer} को तकादा संदेश भेज दिया गया है।"
         action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
 
-    elif any(w in lower_t for w in cashflow_kw):
-        intent = "CHECK_CASHFLOW"
+    elif intent == "CHECK_CASHFLOW":
         cash = db.get("cash_in_hand", 18500.0)
-        audio_response_text = f"गल्ले में ₹{cash:,.0f} नकद उपलब्ध हैं। अगले 48 घंटों में ₹48,500 के सप्लायर भुगतान देय हैं। पेटीएम 50,000 रुपये का स्मार्ट लोन तैयार है।"
         action_log = log_and_execute_action("CASHFLOW_QUERY", {"cash_in_hand": cash}, "Spoken cashflow inquiry answered", username=username)
+        audio_response_text = f"गल्ले में ₹{cash:,.0f} नकद उपलब्ध हैं। अगले 48 घंटों में ₹48,500 के सप्लायर भुगतान देय हैं। पेटीएम 50,000 रुपये का स्मार्ट लोन तैयार है।"
         action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
 
     else:
-        # Smart fallback: if any amount is mentioned in speech, treat as Udhaar!
-        amount = parse_hindi_amount(eval_text)
-        if amount == 0.0:
-            nums = re.findall(r'\d+', eval_text)
-            if nums:
-                amount = float(nums[0])
-        if amount > 0:
-            intent = "RECORD_UDHAAR"
-            due_date = extract_due_date(eval_text)
-            name = extract_customer_name(eval_text)
-            new_entry = add_udhaar(name, "+91 98765 00000", amount, "आवाज़ से दर्ज किराना उधार", due_date, username=username)
-            due_str = f" — वापसी तारीख: {due_date}" if due_date else ""
-            audio_response_text = f"ठीक है, {name} का ₹{amount:,.0f} का उधार खाते में दर्ज कर दिया गया है{due_str}।"
-            action_log = log_and_execute_action(
-                "RECORD_UDHAAR", new_entry,
-                f"Spoken udhaar recorded: {name} owes ₹{amount:,.2f}, due: {due_date or 'unspecified'}",
-                username=username
-            )
-            action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
-        else:
-            intent = "STORE_UPDATE"
-            audio_response_text = f"आपकी बात नोट कर ली गई है: {transcript}"
-            action_log = log_and_execute_action("VOICE_MEMO", {"text": transcript}, f"Recorded merchant voice memo: '{transcript}'", username=username)
-            action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
+        action_log = log_and_execute_action("VOICE_MEMO", {"text": transcript}, f"Recorded merchant voice memo: '{transcript}'", username=username)
+        audio_response_text = voice_response or f"आपकी बात नोट कर ली गई है: {transcript}"
+        action_desc = action_log.get("description", "") if isinstance(action_log, dict) else str(action_log)
 
     # Real Cognee memory graph update
     background_tasks.add_task(process_cognee_memory, f"Spoken Event [{intent}]: {transcript}")

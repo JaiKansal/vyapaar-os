@@ -99,6 +99,18 @@
   "daily_sales_avg": 9200.0,
   "customers_udhaar": [
     {
+      "id": "UDH-102",
+      "customer_name": "मान्य गोयल",
+      "phone": "+91 98765 00000",
+      "amount": 1000.0,
+      "days_overdue": 0,
+      "items": "आवाज़ से दर्ज किराना उधार",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "23 सितम्बर",
+      "created_at": "2026-09-19 15:15"
+    },
+    {
       "id": "UDH-105",
       "customer_name": "मान्य गोयल",
       "phone": "+91 98765 00000",
@@ -109,57 +121,29 @@
       "last_reminded": "Just added",
       "due_date": "23 September 2026",
       "created_at": "2026-09-19 15:10"
-    },
-    {
-      "id": "UDH-104",
-      "customer_name": "मान्य गोयल",
-      "phone": "+91 98765 00000",
-      "amount": 1000.0,
-      "days_overdue": 0,
-      "items": "आवाज़ से दर्ज किराना उधार",
-      "status": "ACTIVE",
-      "last_reminded": "Just added",
-      "due_date": "23 September 2026",
-      "created_at": "2026-09-19 15:09"
-    },
-    {
-      "id": "UDH-101",
-      "customer_name": "सुरेश शर्मा",
-      "phone": "+91 98765 43210",
-      "amount": 2450.0,
-      "days_overdue": 14,
-      "items": "2x बासमती चावल 5kg, रिफाइंड तेल 2L",
-      "status": "OVERDUE",
-      "last_reminded": "3 दिन पहले",
-      "due_date": "20-Sep-2026",
-      "created_at": "2026-09-19 09:00"
-    },
-    {
-      "id": "UDH-102",
-      "customer_name": "पूजा वर्मा",
-      "phone": "+91 98111 22334",
-      "amount": 1120.0,
-      "days_overdue": 6,
-      "items": "आटा 10kg, चाय पत्ती 500g, चीनी 2kg",
-      "status": "PENDING",
-      "last_reminded": "कभी नहीं",
-      "due_date": "22-Sep-2026",
-      "created_at": "2026-09-19 09:00"
-    },
-    {
-      "id": "UDH-103",
-      "customer_name": "अनिल कुमार (ढाबा)",
-      "phone": "+91 99223 88441",
-      "amount": 4800.0,
-      "days_overdue": 21,
-      "items": "दाल 20kg, चावल 30kg, सरसों तेल",
-      "status": "CRITICAL",
-      "last_reminded": "7 दिन पहले",
-      "due_date": "18-Sep-2026",
-      "created_at": "2026-09-19 09:00"
     }
   ],
   "action_logs": [
+    {
+      "id": "ACT-106",
+      "timestamp": "03:15 PM, 19 Sep",
+      "action_type": "RECORD_UDHAAR",
+      "description": "Spoken udhaar recorded: मान्य गोयल owes ₹1,000.00, due: 23 सितम्बर",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "id": "UDH-102",
+        "customer_name": "मान्य गोयल",
+        "phone": "+91 98765 00000",
+        "amount": 1000.0,
+        "days_overdue": 0,
+        "items": "आवाज़ से दर्ज किराना उधार",
+        "status": "ACTIVE",
+        "last_reminded": "Just added",
+        "due_date": "23 सितम्बर",
+        "created_at": "2026-09-19 15:15"
+      }
+    },
     {
       "id": "ACT-105",
       "timestamp": "03:10 PM, 19 Sep",

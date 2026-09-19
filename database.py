@@ -19,44 +19,7 @@ DEFAULT_STATE = {
     "location": "Laxmi Nagar, Delhi NCR",
     "cash_in_hand": 18500.0,
     "daily_sales_avg": 9200.0,
-    "customers_udhaar": [
-        {
-            "id": "UDH-101",
-            "customer_name": "सुरेश शर्मा",
-            "phone": "+91 98765 43210",
-            "amount": 2450.0,
-            "days_overdue": 14,
-            "items": "2x बासमती चावल 5kg, रिफाइंड तेल 2L",
-            "status": "OVERDUE",
-            "last_reminded": "3 दिन पहले",
-            "due_date": "20-Sep-2026",
-            "created_at": "2026-09-19 09:00"
-        },
-        {
-            "id": "UDH-102",
-            "customer_name": "पूजा वर्मा",
-            "phone": "+91 98111 22334",
-            "amount": 1120.0,
-            "days_overdue": 6,
-            "items": "आटा 10kg, चाय पत्ती 500g, चीनी 2kg",
-            "status": "PENDING",
-            "last_reminded": "कभी नहीं",
-            "due_date": "22-Sep-2026",
-            "created_at": "2026-09-19 09:00"
-        },
-        {
-            "id": "UDH-103",
-            "customer_name": "अनिल कुमार (ढाबा)",
-            "phone": "+91 99223 88441",
-            "amount": 4800.0,
-            "days_overdue": 21,
-            "items": "दाल 20kg, चावल 30kg, सरसों तेल",
-            "status": "CRITICAL",
-            "last_reminded": "7 दिन पहले",
-            "due_date": "18-Sep-2026",
-            "created_at": "2026-09-19 09:00"
-        }
-    ],
+    "customers_udhaar": [],
     "inventory": [
         {
             "sku": "SKU-AMUL-01",
@@ -208,8 +171,8 @@ def load_db(username: str = None) -> Dict[str, Any]:
 
     # Auto-heal: Ensure every merchant always has active inventory, supplier dues, customers udhaar, and working capital
     dirty = False
-    if not user_state.get("customers_udhaar") or not isinstance(user_state.get("customers_udhaar"), list):
-        user_state["customers_udhaar"] = copy.deepcopy(DEFAULT_STATE["customers_udhaar"])
+    if "customers_udhaar" not in user_state or not isinstance(user_state.get("customers_udhaar"), list):
+        user_state["customers_udhaar"] = []
         dirty = True
     if not user_state.get("inventory"):
         user_state["inventory"] = copy.deepcopy(DEFAULT_STATE["inventory"])
