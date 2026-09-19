@@ -1579,6 +1579,20 @@ with tab_stock:
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Restock error: {e}")
+        else:
+            st.info(T("अभी किराना इन्वेंट्री सूची खाली है। डिफ़ॉल्ट किराना कैटलॉग लोड करने के लिए नीचे बटन दबाएं:", "Kirana inventory is currently empty. Click below to load standard Kirana catalog:"))
+            if st.button(T("📦 किराना कैटलॉग लोड करें", "📦 Load Kirana Catalog"), key="btn_reload_catalog"):
+                try:
+                    import database
+                    import copy
+                    db = database.load_db(st.session_state.get("username", "ramesh"))
+                    db["inventory"] = copy.deepcopy(database.DEFAULT_STATE["inventory"])
+                    database.save_db(db, st.session_state.get("username", "ramesh"))
+                    st.success(T("✅ किराना कैटलॉग लोड हो गया!", "✅ Catalog loaded!"))
+                    time.sleep(0.4)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error loading catalog: {e}")
 
     with st_c2:
         st.markdown(f"#### {T('🚚 सप्लायर बिल एवं देय तिथियां:', '🚚 Supplier Invoices & Due Dates:')}")
@@ -1596,6 +1610,20 @@ with tab_stock:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+        else:
+            st.success(T("🎉 बहुत बढ़िया! कोई भी सप्लायर बिल बकाया नहीं है।", "🎉 Awesome! No supplier bills due."))
+            if st.button(T("🚚 सप्लायर बिल लोड करें", "🚚 Load Supplier Invoices"), key="btn_reload_invoices"):
+                try:
+                    import database
+                    import copy
+                    db = database.load_db(st.session_state.get("username", "ramesh"))
+                    db["supplier_invoices"] = copy.deepcopy(database.DEFAULT_STATE["supplier_invoices"])
+                    database.save_db(db, st.session_state.get("username", "ramesh"))
+                    st.success(T("✅ सप्लायर बिल लोड हो गए!", "✅ Invoices loaded!"))
+                    time.sleep(0.4)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error loading invoices: {e}")
 
 # --------------------------------------------------------------------------
 # TAB 5: PARCHI SCANNER (1-CLICK SARVAM VISION ZERO-UI INGESTION)

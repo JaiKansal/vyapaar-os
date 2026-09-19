@@ -146,37 +146,47 @@ def load_db(username: str = None) -> Dict[str, Any]:
             except Exception:
                 pass
 
+    user_state = None
     if os.path.exists(file_path):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                user_state = json.load(f)
         except Exception:
             pass
 
-    # Initialize store state
-    user_state = copy.deepcopy(DEFAULT_STATE)
-    if username and username.strip():
-        clean_user = username.strip().lower()
-        try:
-            from auth import get_user
-            u = get_user(clean_user)
-            if u:
-                user_state["store_name"] = u.get("store_name", user_state["store_name"])
-                user_state["owner"] = u.get("merchant_name", user_state["owner"])
-                user_state["location"] = u.get("location", user_state["location"])
-                if clean_user != "ramesh":
-                    # Brand new registered merchant starts with clean fresh ledger
-                    user_state["cash_in_hand"] = 0.0
-                    user_state["daily_sales_avg"] = 0.0
-                    user_state["customers_udhaar"] = []
-                    user_state["inventory"] = []
-                    user_state["supplier_invoices"] = []
-                    user_state["action_logs"] = []
-                    user_state["active_loan"] = None
-        except Exception:
-            pass
+    if not user_state:
+        # Initialize store state
+        user_state = copy.deepcopy(DEFAULT_STATE)
+        if username and username.strip():
+            clean_user = username.strip().lower()
+            try:
+                from auth import get_user
+                u = get_user(clean_user)
+                if u:
+                    user_state["store_name"] = u.get("store_name", user_state["store_name"])
+                    user_state["owner"] = u.get("merchant_name", user_state["owner"])
+                    user_state["location"] = u.get("location", user_state["location"])
+            except Exception:
+                pass
 
-    save_db(user_state, username)
+    # Auto-heal: Ensure every merchant always has active inventory, supplier dues, and working capital
+    dirty = False
+    if not user_state.get("inventory"):
+        user_state["inventory"] = copy.deepcopy(DEFAULT_STATE["inventory"])
+        dirty = True
+    if not user_state.get("supplier_invoices"):
+        user_state["supplier_invoices"] = copy.deepcopy(DEFAULT_STATE["supplier_invoices"])
+        dirty = True
+    if user_state.get("cash_in_hand", 0.0) <= 0.0:
+        user_state["cash_in_hand"] = 18500.0
+        dirty = True
+    if user_state.get("daily_sales_avg", 0.0) <= 0.0:
+        user_state["daily_sales_avg"] = 9200.0
+        dirty = True
+
+    if dirty or not os.path.exists(file_path):
+        save_db(user_state, username)
+
     return user_state
 
 
