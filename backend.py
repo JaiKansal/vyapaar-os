@@ -218,7 +218,7 @@ def synthesize_spoken_hindi(text: str) -> str:
                 "pace": 1.05,
                 "pitch": 0,
                 "loudness": 1.5,
-                "model": "bulbul:v2",
+                "model": "bulbul:v3",
                 "output_audio_codec": "mp3",
                 "enable_preprocessing": True
             }
@@ -517,6 +517,152 @@ async def stt_endpoint(audio_file: UploadFile = File(...)):
     return {"transcript": transcript}
 
 
+# ─────────────────────────────────────────────────────────────────
+# MODULE-LEVEL HELPERS: Parse Hindi spoken number words & entities
+# ─────────────────────────────────────────────────────────────────
+def parse_hindi_amount(text: str) -> float:
+    """
+    Converts spoken Hindi number words to a float.
+    Examples:
+      'हज़ार' → 1000,  'पाँच हज़ार' → 5000
+      'दो सौ' → 200,   'पचास' → 50
+      'डेढ़ लाख' → 150000,  '₹500' → 500
+    """
+    hindi_ones = {
+        'शून्य':0,'एक':1,'दो':2,'तीन':3,'चार':4,'पाँच':5,'पांच':5,
+        'छह':6,'छः':6,'सात':7,'आठ':8,'नौ':9,'दस':10,
+        'ग्यारह':11,'बारह':12,'तेरह':13,'चौदह':14,'पंद्रह':15,
+        'सोलह':16,'सत्रह':17,'अठारह':18,'उन्नीस':19,'बीस':20,
+        'इक्कीस':21,'बाईस':22,'तेईस':23,'चौबीस':24,'पच्चीस':25,
+        'छब्बीस':26,'सत्ताईस':27,'अट्ठाईस':28,'उनतीस':29,'तीस':30,
+        'इकतीस':31,'बत्तीस':32,'तैंतीस':33,'चौंतीस':34,'पैंतीस':35,
+        'छत्तीस':36,'सैंतीस':37,'अड़तीस':38,'उनतालीस':39,'चालीस':40,
+        'इकतालीस':41,'बयालीस':42,'तेतालीस':43,'चवालीस':44,'पैंतालीस':45,
+        'छियालीस':46,'सैंतालीस':47,'अड़तालीस':48,'उनचास':49,'पचास':50,
+        'साठ':60,'सत्तर':70,'अस्सी':80,'नब्बे':90,
+        'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,
+        'eight':8,'nine':9,'ten':10,'eleven':11,'twelve':12,'fifteen':15,
+        'twenty':20,'thirty':30,'forty':40,'fifty':50,'sixty':60,
+        'seventy':70,'eighty':80,'ninety':90,'hundred':100,
+        'ek':1,'do':2,'teen':3,'char':4,'paanch':5,'paach':5,
+        'chhe':6,'che':6,'saat':7,'aath':8,'nau':9,'das':10,
+        'gyarah':11,'barah':12,'terah':13,'pandrah':15,'bees':20,
+        'pachees':25,'tees':30,'chalees':40,'pachaas':50,'saath':60,
+        'sattar':70,'assi':80,'nabbe':90,
+    }
+    hindi_mults = {
+        'सौ':100,'सो':100,'हज़ार':1000,'हजार':1000,'हज़ारी':1000,
+        'thousand':1000,'लाख':100000,'lakh':100000,'करोड़':10000000,
+        'sau':100,'hajar':1000,'hazaar':1000,'hazar':1000,'hajaar':1000,
+        'hazzar':1000,'lacs':100000,
+    }
+
+    t = text.lower()
+    t = re.sub(r'\d{1,2}\s*(?:january|february|march|april|may|june|july|august|'
+               r'september|october|november|december|'
+               r'जनवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|'
+               r'सितंबर|सितम्बर|अक्टूबर|नवंबर|दिसंबर)'
+               r'(?:\s*\d{4})?', '', t)
+    t = re.sub(r'\b20\d{2}\b', '', t)
+
+    m = re.search(r'[₹Rs]+\s*(\d[\d,]*)', t)
+    if m:
+        return float(m.group(1).replace(',', ''))
+
+    digits = re.findall(r'\b(\d[\d,]*)\b', t)
+    if digits:
+        return float(digits[0].replace(',', ''))
+
+    words = t.split()
+    total = 0.0
+    current = 0.0
+    found = False
+    for w in words:
+        if w in hindi_ones:
+            current += hindi_ones[w]
+            found = True
+        elif w in hindi_mults:
+            mult = hindi_mults[w]
+            if current == 0:
+                current = 1
+            if mult >= 1000:
+                total += current * mult
+                current = 0
+            else:
+                current *= mult
+            found = True
+    if found:
+        return total + current
+    return 0.0
+
+
+def extract_due_date(text: str) -> Optional[str]:
+    """Returns formatted due date string or None."""
+    t = text.lower()
+    months_en = {
+        'january':'January','february':'February','march':'March',
+        'april':'April','may':'May','june':'June','july':'July',
+        'august':'August','september':'September','october':'October',
+        'november':'November','december':'December',
+    }
+    months_hi = {
+        'जनवरी':'January','फरवरी':'February','मार्च':'March',
+        'अप्रैल':'April','मई':'May','जून':'June','जुलाई':'July',
+        'अगस्त':'August','सितंबर':'September','सितम्बर':'September',
+        'अक्टूबर':'October','नवंबर':'November','दिसंबर':'December',
+    }
+    all_months = {**months_en, **months_hi}
+
+    for mn, me in all_months.items():
+        pattern = r'(\d{1,2})\s*' + re.escape(mn)
+        m = re.search(pattern, t)
+        if m:
+            day = m.group(1)
+            year_m = re.search(r'\b(20\d{2})\b', text)
+            year = year_m.group(1) if year_m else str(datetime.now().year)
+            return f"{day} {me} {year}"
+    return None
+
+
+def extract_customer_name(text: str) -> str:
+    """Extract the most likely customer name from the command."""
+    known_names = {
+        'शर्मा': 'शर्मा जी', 'sharma': 'शर्मा जी',
+        'वर्मा': 'वर्मा जी', 'verma': 'वर्मा जी',
+        'गुप्ता': 'गुप्ता जी', 'gupta': 'गुप्ता जी',
+        'अनिल': 'अनिल कुमार', 'anil': 'अनिल कुमार',
+        'राम': 'राम जी', 'ram': 'राम जी',
+        'श्याम': 'श्याम जी',
+        'राजेश': 'राजेश जी', 'rajesh': 'राजेश जी',
+        'सुरेश': 'सुरेश जी', 'suresh': 'सुरेश जी',
+        'महेश': 'महेश जी', 'mahesh': 'महेश जी',
+        'रमेश': 'रमेश जी', 'ramesh': 'रमेश जी',
+    }
+    tl = text.lower()
+    for key, val in known_names.items():
+        if key in tl or key in text:
+            parts = text.split()
+            name_parts = []
+            for p in parts:
+                if any(k in p.lower() for k in known_names):
+                    name_parts.append(p)
+            if len(name_parts) >= 2:
+                return ' '.join(name_parts)
+            return val
+
+    stop = {
+        'हे','नमस्ते','सुनो','मुनीमजी','मुनीम','जी','का','की','के','में','को',
+        'उधार','लिखो','लिख','दो','रुपये','रुपया','रुपए','हज़ार','हजार',
+        'सौ','लाख','rs','₹','inr','wale','वाले','wala','खाते','खाता',
+        'से','लेंगे','देंगे','लौटाएंगे','लौटाएगा','लेगा','देगा','lautaayenge',
+        'hey','he','ok','aur','aaj','kal','jo','ki','ke','ka','ko',
+    }
+    words = [w for w in text.split() if w.lower() not in stop and not w.isdigit() and len(w) > 1]
+    if words:
+        return ' '.join(words[:2])
+    return 'ग्राहक'
+
+
 @app.post("/api/process-voice")
 async def process_voice(
     background_tasks: BackgroundTasks,
@@ -573,166 +719,6 @@ async def process_voice(
             "guardrail_status": "READY_FOR_VOICE_COMMAND",
             "n8n_status": "Standby"
         }
-
-    # ─────────────────────────────────────────────────────────────────
-    # HELPER: Parse Hindi/Hinglish number words → float
-    # ─────────────────────────────────────────────────────────────────
-    def parse_hindi_amount(text: str) -> float:
-        """
-        Converts spoken Hindi number words to a float.
-        Examples:
-          'हज़ार' → 1000,  'पाँच हज़ार' → 5000
-          'दो सौ' → 200,   'पचास' → 50
-          'डेढ़ लाख' → 150000,  '₹500' → 500
-        """
-        hindi_ones = {
-            'शून्य':0,'एक':1,'दो':2,'तीन':3,'चार':4,'पाँच':5,'पांच':5,
-            'छह':6,'छः':6,'सात':7,'आठ':8,'नौ':9,'दस':10,
-            'ग्यारह':11,'बारह':12,'तेरह':13,'चौदह':14,'पंद्रह':15,
-            'सोलह':16,'सत्रह':17,'अठारह':18,'उन्नीस':19,'बीस':20,
-            'इक्कीस':21,'बाईस':22,'तेईस':23,'चौबीस':24,'पच्चीस':25,
-            'छब्बीस':26,'सत्ताईस':27,'अट्ठाईस':28,'उनतीस':29,'तीस':30,
-            'इकतीस':31,'बत्तीस':32,'तैंतीस':33,'चौंतीस':34,'पैंतीस':35,
-            'छत्तीस':36,'सैंतीस':37,'अड़तीस':38,'उनतालीस':39,'चालीस':40,
-            'इकतालीस':41,'बयालीस':42,'तेतालीस':43,'चवालीस':44,'पैंतालीस':45,
-            'छियालीस':46,'सैंतालीस':47,'अड़तालीस':48,'उनचास':49,'पचास':50,
-            'साठ':60,'सत्तर':70,'अस्सी':80,'नब्बे':90,
-            'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,
-            'eight':8,'nine':9,'ten':10,'eleven':11,'twelve':12,'fifteen':15,
-            'twenty':20,'thirty':30,'forty':40,'fifty':50,'sixty':60,
-            'seventy':70,'eighty':80,'ninety':90,'hundred':100,
-            # Hinglish transliteration
-            'ek':1,'do':2,'teen':3,'char':4,'paanch':5,'paach':5,
-            'chhe':6,'che':6,'saat':7,'aath':8,'nau':9,'das':10,
-            'gyarah':11,'barah':12,'terah':13,'pandrah':15,'bees':20,
-            'pachees':25,'tees':30,'chalees':40,'pachaas':50,'saath':60,
-            'sattar':70,'assi':80,'nabbe':90,
-        }
-        hindi_mults = {
-            'सौ':100,'सो':100,'हज़ार':1000,'हजार':1000,'हज़ारी':1000,
-            'thousand':1000,'लाख':100000,'lakh':100000,'करोड़':10000000,
-            # Hinglish transliterations
-            'sau':100,'hajar':1000,'hazaar':1000,'hazar':1000,'hajaar':1000,
-            'hazzar':1000,'lacs':100000,
-        }
-
-        t = text.lower()
-        # Remove date-like patterns first: e.g. "20 september 2026"
-        t = re.sub(r'\d{1,2}\s*(?:january|february|march|april|may|june|july|august|'
-                   r'september|october|november|december|'
-                   r'जनवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|'
-                   r'सितंबर|सितम्बर|अक्टूबर|नवंबर|दिसंबर)'
-                   r'(?:\s*\d{4})?', '', t)
-        t = re.sub(r'\b20\d{2}\b', '', t)  # strip standalone years like 2026
-
-        # Look for explicit ₹ or Rs amounts like ₹1000, Rs 500
-        m = re.search(r'[₹Rs]+\s*(\d[\d,]*)', t)
-        if m:
-            return float(m.group(1).replace(',', ''))
-
-        # Look for bare digit sequences (only after stripping dates above)
-        digits = re.findall(r'\b(\d[\d,]*)\b', t)
-        if digits:
-            return float(digits[0].replace(',', ''))
-
-        # Parse spoken number words: handle "पाँच हज़ार", "दो सौ पचास" etc.
-        words = t.split()
-        total = 0.0
-        current = 0.0
-        found = False
-        for w in words:
-            if w in hindi_ones:
-                current += hindi_ones[w]
-                found = True
-            elif w in hindi_mults:
-                mult = hindi_mults[w]
-                if current == 0:
-                    current = 1
-                if mult >= 1000:
-                    total += current * mult
-                    current = 0
-                else:
-                    current *= mult
-                found = True
-        if found:
-            return total + current
-        return 0.0  # no amount found
-
-    # ─────────────────────────────────────────────────────────────────
-    # HELPER: Extract due date from spoken text
-    # ─────────────────────────────────────────────────────────────────
-    def extract_due_date(text: str) -> str:
-        """Returns formatted due date string or None."""
-        t = text.lower()
-        months_en = {
-            'january':'January','february':'February','march':'March',
-            'april':'April','may':'May','june':'June','july':'July',
-            'august':'August','september':'September','october':'October',
-            'november':'November','december':'December',
-        }
-        months_hi = {
-            'जनवरी':'January','फरवरी':'February','मार्च':'March',
-            'अप्रैल':'April','मई':'May','जून':'June','जुलाई':'July',
-            'अगस्त':'August','सितंबर':'September','सितम्बर':'September',
-            'अक्टूबर':'October','नवंबर':'November','दिसंबर':'December',
-        }
-        all_months = {**months_en, **months_hi}
-
-        # Pattern: "20 September 2026" / "20 सितंबर" / "बीस सितंबर"
-        for mn, me in all_months.items():
-            pattern = r'(\d{1,2})\s*' + re.escape(mn)
-            m = re.search(pattern, t)
-            if m:
-                day = m.group(1)
-                year_m = re.search(r'\b(20\d{2})\b', text)
-                year = year_m.group(1) if year_m else str(datetime.now().year)
-                return f"{day} {me} {year}"
-        return None
-
-    # ─────────────────────────────────────────────────────────────────
-    # HELPER: Extract customer name from spoken command
-    # ─────────────────────────────────────────────────────────────────
-    def extract_customer_name(text: str) -> str:
-        """Extract the most likely customer name from the command."""
-        # Known surname shortcuts
-        known_names = {
-            'शर्मा': 'शर्मा जी', 'sharma': 'शर्मा जी',
-            'वर्मा': 'वर्मा जी', 'verma': 'वर्मा जी',
-            'गुप्ता': 'गुप्ता जी', 'gupta': 'गुप्ता जी',
-            'अनिल': 'अनिल कुमार', 'anil': 'अनिल कुमार',
-            'राम': 'राम जी', 'ram': 'राम जी',
-            'श्याम': 'श्याम जी',
-            'राजेश': 'राजेश जी', 'rajesh': 'राजेश जी',
-            'सुरेश': 'सुरेश जी', 'suresh': 'सुरेश जी',
-            'महेश': 'महेश जी', 'mahesh': 'महेश जी',
-            'रमेश': 'रमेश जी', 'ramesh': 'रमेश जी',
-        }
-        tl = text.lower()
-        for key, val in known_names.items():
-            if key in tl or key in text:
-                # Try to get full name: e.g. "सुरेश शर्मा" → both words
-                parts = text.split()
-                name_parts = []
-                for p in parts:
-                    if any(k in p.lower() for k in known_names):
-                        name_parts.append(p)
-                if len(name_parts) >= 2:
-                    return ' '.join(name_parts)
-                return val
-
-        # Fallback: strip wake words and stop words, take first 1-2 remaining tokens
-        stop = {
-            'हे','नमस्ते','सुनो','मुनीमजी','मुनीम','जी','का','की','के','में','को',
-            'उधार','लिखो','लिख','दो','रुपये','रुपया','रुपए','हज़ार','हजार',
-            'सौ','लाख','rs','₹','inr','wale','वाले','wala','खाते','खाता',
-            'से','लेंगे','देंगे','लौटाएंगे','लौटाएगा','लेगा','देगा','lautaayenge',
-            'hey','he','ok','aur','aaj','kal','jo','ki','ke','ka','ko',
-        }
-        words = [w for w in text.split() if w.lower() not in stop and not w.isdigit() and len(w) > 1]
-        if words:
-            # Take first 2 meaningful words as name
-            return ' '.join(words[:2])
-        return 'ग्राहक'
 
     # Real entity recognition & database mutation based on speech
     eval_text = cleaned_transcript if cleaned_transcript else transcript
@@ -995,13 +981,24 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
     lines = raw_text.strip().split('\n')
     slip_date = None
 
-    for raw_line in lines:
-        line = raw_line.strip()
+    # Pre-merge split lines (e.g. customer/items on line 1, '= ₹ 850' on line 2)
+    merged_lines = []
+    for raw_l in lines:
+        s = raw_l.strip()
+        if not s:
+            continue
+        if (s.startswith("=") or s.startswith("₹") or s.startswith("Rs") or re.match(r"^₹?\s*\d+\s*(?:\/-)?$", s)) and merged_lines:
+            merged_lines[-1] += " " + s
+        else:
+            merged_lines.append(s)
+
+    for line in merged_lines:
+        line = line.strip()
         if not line or len(line) < 2:
             continue
 
         lower_line = line.lower()
-        
+
         # Check for date in header line
         m_date = re.search(r'(?:दिनांक|तारीख|date)\s*[:\-]?\s*([0-9a-zA-Z\-/]+)', line, re.IGNORECASE)
         if m_date:
@@ -1012,7 +1009,7 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
         if any(h in lower_line for h in [
             'गणेश', 'नमः', 'शुभ लाभ', 'दिनांक', 'date', 'तारीख', 
             'bill no', 'बिल नं', 'total:', 'टोटल:', 'कुल:', 'om sai', 
-            'jai mata', 'shree ganesh', 'shri ganesh'
+            'jai mata', 'shree ganesh', 'shri ganesh', 'किराना कच्चा'
         ]):
             continue
 
@@ -1021,19 +1018,34 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
         if not cleaned or len(cleaned) < 2:
             continue
 
-        # Extract amount from the line (e.g. ₹850, 850/-, Rs 850, = 850)
-        amount_match = re.findall(r'(?:₹|rs\.?|inr|=)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+)\s*(?:/-|रु|रुपये)?', cleaned, re.IGNORECASE)
+        # Robust extraction of monetary price (distinguish price from unit quantities like 5kg, 2 packets)
         amount = 0.0
-        if amount_match:
+        explicit = re.findall(r'(?:₹|rs\.?|inr|रु\.?|रुपये)\s*([0-9,]+(?:\.[0-9]{2})?)', cleaned, re.IGNORECASE)
+        if explicit:
             try:
-                # Take the last matched number which is typically the line item total
-                val_str = amount_match[-1].replace(',', '')
-                amount = float(val_str)
-            except ValueError:
-                amount = 0.0
+                amount = float(explicit[-1].replace(',', ''))
+            except Exception:
+                pass
+        elif re.findall(r'(?:=|\/-)\s*₹?\s*([0-9,]+(?:\.[0-9]{2})?)', cleaned):
+            try:
+                amount = float(re.findall(r'(?:=|\/-)\s*₹?\s*([0-9,]+(?:\.[0-9]{2})?)', cleaned)[-1].replace(',', ''))
+            except Exception:
+                pass
+        elif re.findall(r'([0-9,]+)\s*\/-', cleaned):
+            try:
+                amount = float(re.findall(r'([0-9,]+)\s*\/-', cleaned)[-1].replace(',', ''))
+            except Exception:
+                pass
+        else:
+            clean_no_units = re.sub(r'[0-9]+\s*(?:kg|g|gm|l|ltr|ml|पैकेट|packet|किलो|ग्राम|लीटर)\b', '', cleaned, flags=re.IGNORECASE)
+            nums = re.findall(r'\b([0-9]{2,6})\b', clean_no_units)
+            if nums:
+                try:
+                    amount = float(nums[-1].replace(',', ''))
+                except Exception:
+                    pass
 
         # Extract customer name vs item description
-        # Formats: "सुरेश शर्मा - 2 पैकेट तेल = ₹850" or "सुरेश शर्मा : 2 तेल = 850" or "Pooja Verma - 10kg Atta"
         name = "ग्राहक"
         items = "किराना सामान"
 
@@ -1041,7 +1053,6 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
             parts = cleaned.split('-', 1)
             name = parts[0].strip()
             items_part = parts[1].strip()
-            # Clean items part by removing amount expression
             items = re.sub(r'(?:₹|rs\.?|inr|=)?\s*[0-9,]+(?:\.[0-9]{2})?\s*(?:/-|रु|रुपये|\(उधार\)|\(udhaar\))?', '', items_part, flags=re.IGNORECASE).strip()
         elif ':' in cleaned:
             parts = cleaned.split(':', 1)
@@ -1050,13 +1061,8 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
             items = re.sub(r'(?:₹|rs\.?|inr|=)?\s*[0-9,]+(?:\.[0-9]{2})?\s*(?:/-|रु|रुपये|\(उधार\)|\(udhaar\))?', '', items_part, flags=re.IGNORECASE).strip()
         elif '=' in cleaned:
             parts = cleaned.split('=', 1)
-            name_and_item = parts[0].strip()
-            name_parts = name_and_item.split(' ')
-            if len(name_parts) >= 2:
-                name = " ".join(name_parts[:2])
-                items = " ".join(name_parts[2:]) if len(name_parts) > 2 else "किराना सामान"
-            else:
-                name = name_and_item
+            name = parts[0].strip()
+            items = "किराना सामान"
         else:
             words = cleaned.split()
             if len(words) >= 2:
@@ -1065,6 +1071,9 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
 
         # Final cleanup on extracted names and items
         name = re.sub(r'[\(\[\{].*?[\)\]\}]', '', name).strip()
+        name = re.sub(r'^[0-9\.\-\s]+', '', name).strip()
+        items = re.sub(r'[\=\-\:\+]+$', '', items).strip()
+        items = re.sub(r'\(?उधार\)?', '', items, flags=re.IGNORECASE).strip()
         if not items:
             items = "किराना सामान"
 
@@ -1078,7 +1087,7 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
                 "customer": name or "अज्ञात ग्राहक",
                 "items": items,
                 "amount": amount,
-                "due_date": slip_date
+                "due_date": slip_date or datetime.now().strftime("%d-%m-%Y")
             }
             results.append(entry)
 
