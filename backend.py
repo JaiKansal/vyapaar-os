@@ -972,16 +972,163 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
     return _ocr_with_gemini_vision(upload_bytes)
 
 
+def clean_ocr_text_for_display(raw_text: str) -> str:
+    """Cleans up raw OCR output (such as HTML tables from Sarvam Doc AI)
+    into clean, readable pipe-delimited text for display in the UI.
+    """
+    if not raw_text:
+        return ""
+    if "<table" in raw_text.lower():
+        cleaned = raw_text
+        def tr_to_pipe(m):
+            row_content = m.group(1)
+            cells = re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row_content, re.IGNORECASE | re.DOTALL)
+            cells_clean = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
+            if any(cells_clean):
+                return " | ".join(cells_clean) + "\n"
+            return ""
+        cleaned = re.sub(r'<tr[^>]*>(.*?)</tr>', tr_to_pipe, cleaned, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = re.sub(r'<[^>]+>', '', cleaned)
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+        return cleaned
+    return raw_text.strip()
+
+
 def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
-    """Robust parser for handwritten Kirana kacha bills (पर्ची).
-    Correctly ignores religious greetings, dates, and headers.
-    Accurately extracts customer name, line items with quantities, and total monetary debt amount.
+    """Robust parser for handwritten Kirana kacha bills and printed cash memos (पर्ची / कैश मेमो).
+    - Accurately detects HTML tables emitted by Sarvam Doc AI (<tr>, <td>, QNTY, PARTICULARS, AMOUNT)
+    - Accurately detects single-customer bill headers ('Sold to क्रेता हेमा ज्ञानी', 'M/s ...', 'श्रीमान ...')
+    - Correctly skips religious greetings, bill metadata, and Total/जोड़ rows
+    - Falls back seamlessly to multi-customer informal slip parsing
     """
     results = []
-    lines = raw_text.strip().split('\n')
-    slip_date = None
+    if not raw_text or not raw_text.strip():
+        return results
 
-    # Pre-merge split lines (e.g. customer/items on line 1, '= ₹ 850' on line 2)
+    # 1. Detect slip date
+    slip_date = None
+    m_date = re.search(r'(?:दिनांक|तारीख|date|तिथि)[\s:/-]*([0-9]{1,2}[\/\.\-][0-9]{1,2}[\/\.\-][0-9]{2,4})', raw_text, re.IGNORECASE)
+    if m_date:
+        slip_date = m_date.group(1).strip()
+    else:
+        slip_date = datetime.now().strftime("%d-%m-%Y")
+
+    # Helper: Validate customer name
+    def is_valid_customer_name(val: str) -> bool:
+        if not val or len(val) < 2:
+            return False
+        v_low = val.lower()
+        religious_or_header = [
+            'गणेश', 'नमः', 'शुभ', 'लाभ', 'साईं', 'माता', 'दिनांक', 'date', 'तारीख', 
+            'table', 'cash memo', 'क्रमांक', 'bill', 'qnty', 'particulars', 'total', 
+            'जोड़', 'कुल', 'om', 'shree', 'shri', 'jai', 'क्रेता', 'sold to'
+        ]
+        words = [w for w in re.split(r'\s+', v_low) if w]
+        if all(any(r in w for r in religious_or_header) for w in words):
+            return False
+        if any(w in v_low for w in ['date', 'दिनांक', 'table', 'cash memo', 'क्रमांक', 'bill no']):
+            return False
+        return True
+
+    # 2. Detect single customer header (e.g. 'Sold to क्रेता हेमा ज्ञानी', 'M/s ...')
+    header_customer = None
+    patterns = [
+        r'(?:Sold\s+to\s*(?:क्रेता)?|क्रेता|Customer\s*(?:Name)?|नाम)\s*[:\-\.]*\s*(?:क्रेता)?\s*[:\-\.]*\s*(?:\n\s*)?([^\n<]+)',
+        r'(?:M/s|श्रीमान)\s*[:\-\.]*\s*([^\n<]+)'
+    ]
+    for pat in patterns:
+        m = re.search(pat, raw_text, re.IGNORECASE)
+        if m:
+            val = m.group(1).strip()
+            val = re.sub(r'^(?:क्रेता|Sold to|to|नाम|Name|[:\-\.\s])+', '', val, flags=re.IGNORECASE).strip()
+            val = re.sub(r'[;\:\.\s\(\)]+$', '', val).strip()
+            if is_valid_customer_name(val):
+                header_customer = val
+                break
+
+    # 3. Process HTML table (Sarvam Doc AI format for structured bills)
+    if "<table" in raw_text.lower() and "<tr" in raw_text.lower():
+        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', raw_text, re.IGNORECASE | re.DOTALL)
+        for r in rows:
+            if "<th" in r.lower():
+                continue
+            cells = [re.sub(r'<[^>]+>', '', c).strip() for c in re.findall(r'<td[^>]*>(.*?)</td>', r, re.IGNORECASE | re.DOTALL)]
+            cells = [c for c in cells if c]
+            if not cells:
+                continue
+
+            row_str = " ".join(cells).lower()
+            if any(k in row_str for k in ['total', 'जोड़', 'कुल', 'subtotal', 'grand total', 'thank you', 'धन्यवाद', 'goods once sold']):
+                continue
+
+            amount = 0.0
+            amt_idx = None
+            for idx in reversed(range(len(cells))):
+                cleaned_num = re.sub(r'[₹,\s]', '', cells[idx])
+                m_num = re.match(r'^(\d+(?:\.\d+)?)$', cleaned_num)
+                if m_num:
+                    try:
+                        val = float(m_num.group(1))
+                        if val > 0:
+                            amount = val
+                            amt_idx = idx
+                            break
+                    except Exception:
+                        pass
+
+            if amount > 0 and amt_idx is not None:
+                item_parts = [cells[i] for i in range(len(cells)) if i != amt_idx and cells[i]]
+                item_desc = " ".join(item_parts).strip() or "किराना सामान"
+                item_desc = re.sub(r'[\=\-\:\+]+$', '', item_desc).strip()
+                results.append({
+                    "customer": header_customer or "कच्ची पर्ची ग्राहक",
+                    "items": item_desc,
+                    "amount": amount,
+                    "due_date": slip_date
+                })
+
+        if results:
+            return results
+
+    # 4. Process Markdown pipe tables (| Item | Price |)
+    table_lines = [l.strip() for l in raw_text.split('\n') if l.strip().startswith('|') and l.strip().endswith('|')]
+    if len(table_lines) >= 2:
+        for tl in table_lines:
+            cells = [c.strip() for c in tl.strip('|').split('|')]
+            cells = [c for c in cells if c]
+            if not cells or all(re.match(r'^[\:\-\s]+$', c) for c in cells):
+                continue
+            row_str = " ".join(cells).lower()
+            if any(k in row_str for k in ['particulars', 'विवरण', 'qnty', 'amount', 'रकम', 'total', 'जोड़', 'कुल']):
+                continue
+            amount = 0.0
+            amt_idx = None
+            for idx in reversed(range(len(cells))):
+                cleaned_num = re.sub(r'[₹,\s]', '', cells[idx])
+                m_num = re.match(r'^(\d+(?:\.\d+)?)$', cleaned_num)
+                if m_num:
+                    try:
+                        val = float(m_num.group(1))
+                        if val > 0:
+                            amount = val
+                            amt_idx = idx
+                            break
+                    except Exception:
+                        pass
+            if amount > 0 and amt_idx is not None:
+                item_parts = [cells[i] for i in range(len(cells)) if i != amt_idx and cells[i]]
+                item_desc = " ".join(item_parts).strip() or "किराना सामान"
+                results.append({
+                    "customer": header_customer or "कच्ची पर्ची ग्राहक",
+                    "items": item_desc,
+                    "amount": amount,
+                    "due_date": slip_date
+                })
+        if results:
+            return results
+
+    # 5. Process line-by-line (Informal slips / single customer memos)
+    lines = raw_text.strip().split('\n')
     merged_lines = []
     for raw_l in lines:
         s = raw_l.strip()
@@ -999,17 +1146,12 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
 
         lower_line = line.lower()
 
-        # Check for date in header line
-        m_date = re.search(r'(?:दिनांक|तारीख|date)\s*[:\-]?\s*([0-9a-zA-Z\-/]+)', line, re.IGNORECASE)
-        if m_date:
-            slip_date = m_date.group(1).strip()
-            continue
-
         # Skip pure header/greeting/metadata lines
         if any(h in lower_line for h in [
             'गणेश', 'नमः', 'शुभ लाभ', 'दिनांक', 'date', 'तारीख', 
             'bill no', 'बिल नं', 'total:', 'टोटल:', 'कुल:', 'om sai', 
-            'jai mata', 'shree ganesh', 'shri ganesh', 'किराना कच्चा'
+            'jai mata', 'shree ganesh', 'shri ganesh', 'किराना कच्चा',
+            'cash memo', 'sold to', 'goods once sold'
         ]):
             continue
 
@@ -1018,7 +1160,7 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
         if not cleaned or len(cleaned) < 2:
             continue
 
-        # Robust extraction of monetary price (distinguish price from unit quantities like 5kg, 2 packets)
+        # Robust extraction of monetary price
         amount = 0.0
         explicit = re.findall(r'(?:₹|rs\.?|inr|रु\.?|रुपये)\s*([0-9,]+(?:\.[0-9]{2})?)', cleaned, re.IGNORECASE)
         if explicit:
@@ -1045,7 +1187,24 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
                 except Exception:
                     pass
 
-        # Extract customer name vs item description
+        if amount <= 0:
+            continue
+
+        # If a single customer is detected in the header, lines are items for this customer
+        if header_customer:
+            item_desc = re.sub(r'(?:₹|rs\.?|inr|=)?\s*[0-9,]+(?:\.[0-9]{2})?\s*(?:/-|रु|रुपये|\(उधार\)|\(udhaar\))?', '', cleaned, flags=re.IGNORECASE).strip()
+            item_desc = re.sub(r'[\=\-\:\+]+$', '', item_desc).strip()
+            if not item_desc:
+                item_desc = "किराना सामान"
+            results.append({
+                "customer": header_customer,
+                "items": item_desc,
+                "amount": amount,
+                "due_date": slip_date
+            })
+            continue
+
+        # Otherwise extract customer name vs item description per line
         name = "ग्राहक"
         items = "किराना सामान"
 
@@ -1082,12 +1241,12 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
         if any(w in c_low for w in ['दिनांक', 'date', 'तारीख', 'total', 'टोटल', 'कुल', 'bill', 'slip', 'kacha', 'पर्चा', 'खाता', 'नया उधार']):
             continue
 
-        if amount > 0 and len(name) >= 2:
+        if len(name) >= 2:
             entry = {
                 "customer": name or "अज्ञात ग्राहक",
                 "items": items,
                 "amount": amount,
-                "due_date": slip_date or datetime.now().strftime("%d-%m-%Y")
+                "due_date": slip_date
             }
             results.append(entry)
 

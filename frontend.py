@@ -1729,8 +1729,9 @@ with tab_parchi:
             
             raw_detected = s_res.get('raw_text', '')
             if raw_detected:
+                display_text = backend.clean_ocr_text_for_display(raw_detected) if hasattr(backend, 'clean_ocr_text_for_display') else raw_detected
                 with st.expander(T('👁️ सरवम एआई द्वारा पढ़ा गया मूल पाठ (Detected Text)', '👁️ Original Text Detected by Sarvam AI'), expanded=True):
-                    st.code(raw_detected, language='markdown')
+                    st.code(display_text, language='markdown')
 
             slip_df = pd.DataFrame(s_res.get('parsed_entities', {}).get('new_udhaars', []))
             if not slip_df.empty:
