@@ -99,6 +99,30 @@
   "daily_sales_avg": 9200.0,
   "customers_udhaar": [
     {
+      "id": "UDH-105",
+      "customer_name": "मान्य गोयल",
+      "phone": "+91 98765 00000",
+      "amount": 1000.0,
+      "days_overdue": 0,
+      "items": "आवाज़ से दर्ज किराना उधार",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "23 September 2026",
+      "created_at": "2026-09-19 15:10"
+    },
+    {
+      "id": "UDH-104",
+      "customer_name": "मान्य गोयल",
+      "phone": "+91 98765 00000",
+      "amount": 1000.0,
+      "days_overdue": 0,
+      "items": "आवाज़ से दर्ज किराना उधार",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "23 September 2026",
+      "created_at": "2026-09-19 15:09"
+    },
+    {
       "id": "UDH-101",
       "customer_name": "सुरेश शर्मा",
       "phone": "+91 98765 43210",
@@ -136,6 +160,46 @@
     }
   ],
   "action_logs": [
+    {
+      "id": "ACT-105",
+      "timestamp": "03:10 PM, 19 Sep",
+      "action_type": "RECORD_UDHAAR",
+      "description": "Spoken udhaar recorded: मान्य गोयल owes ₹1,000.00, due: 23 September 2026",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "Deterministic Engine (Local Guardrail Verified)",
+      "payload": {
+        "id": "UDH-105",
+        "customer_name": "मान्य गोयल",
+        "phone": "+91 98765 00000",
+        "amount": 1000.0,
+        "days_overdue": 0,
+        "items": "आवाज़ से दर्ज किराना उधार",
+        "status": "ACTIVE",
+        "last_reminded": "Just added",
+        "due_date": "23 September 2026",
+        "created_at": "2026-09-19 15:10"
+      }
+    },
+    {
+      "id": "ACT-104",
+      "timestamp": "03:09 PM, 19 Sep",
+      "action_type": "RECORD_UDHAAR",
+      "description": "Spoken udhaar recorded: मान्य गोयल owes ₹1,000.00, due: 23 September 2026",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "Deterministic Engine (Local Guardrail Verified)",
+      "payload": {
+        "id": "UDH-104",
+        "customer_name": "मान्य गोयल",
+        "phone": "+91 98765 00000",
+        "amount": 1000.0,
+        "days_overdue": 0,
+        "items": "आवाज़ से दर्ज किराना उधार",
+        "status": "ACTIVE",
+        "last_reminded": "Just added",
+        "due_date": "23 September 2026",
+        "created_at": "2026-09-19 15:09"
+      }
+    },
     {
       "id": "ACT-103",
       "timestamp": "03:01 PM, 19 Sep",

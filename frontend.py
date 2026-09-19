@@ -370,10 +370,17 @@ def _direct_process_voice(audio_bytes=None, filename=None, raw_text_input=None, 
 
     # Comprehensive triggers for Kirana speech actions
     udhaar_kw = [
-        "उधार", "udhaar", "udhar", "likh", "likho", "likhlo", "likh do", "likh de", "likhna",
-        "diya", "de do", "de diya", "baki", "baaki", "khate", "khata", "credit", "ledger",
-        "चढ़ा", "चढ़ाओ", "चढ़ा दो", "चढ़ा लो", "डाल दो", "दिए", "ले गया", "काटना", "काट दो", "नाम पर", "नाम पे",
-        "nam par", "naam par", "रुपये", "रुपए", "rupee", "rupees", "rs"
+        "उधार", "udhaar", "udhar",
+        "लिख", "लिखो", "लिख लीजिए", "लिखिए", "लिख लो", "लिखना", "लिख दो", "लिखदे", "likh", "likho", "likhlo", "likh do",
+        "खाता", "खाते", "khata", "khate",
+        "चढ़ा", "चढ़ाओ", "चढ़ा दो", "चढ़ा लो", "चढ़ाना", "chadha",
+        "जोड़", "जोड़ो", "जोड़ दो", "जोड़ लीजिए",
+        "डाल दो", "दर्ज",
+        "देगी", "देगा", "देंगे", "देना है", "देने हैं", "degi", "dega",
+        "ले गया", "ले गई", "ले गए",
+        "नाम पर", "नाम पे", "nam par", "naam par",
+        "रुपये", "रुपए", "रुपया", "rupee", "rupees", "rs", "₹",
+        "credit", "ledger"
     ]
     restock_kw = [
         "ऑर्डर", "order", "खत्म", "दूध", "मिल्क", "स्टॉक", "आटा", "सर्फ", "तेल", "मिर्च",
@@ -387,7 +394,8 @@ def _direct_process_voice(audio_bytes=None, filename=None, raw_text_input=None, 
         "याद", "remind", "व्हाट्सएप", "whatsapp", "पैसे मांग", "मैसेज", "तकादा", "संदेश"
     ]
     cashflow_kw = [
-        "सप्लायर", "गल्ले", "पैसे", "हिसाब", "कैश", "लोन", "deficit", "balance", "loan", "कितना"
+        "गल्ला", "गल्ले", "दुकान में कैश", "गल्ले में कैश", "कैश कितना", "कितना कैश",
+        "हिसाब बताओ", "कैश बैलेंस", "deficit", "cash balance", "drawer balance", "लोन कितना", "लोन बताओ"
     ]
 
     action_desc = ""
