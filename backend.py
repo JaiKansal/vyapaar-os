@@ -3,6 +3,7 @@ import io
 import json
 import base64
 import re
+import time
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -858,8 +859,10 @@ def _ocr_with_gemini_vision(image_bytes: bytes) -> str:
             return ""
 
         genai.configure(api_key=gemini_key)
-        # Use gemini-1.5-flash for vision (fast + multimodal)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+        except Exception:
+            model = genai.GenerativeModel("gemini-pro-vision")
         import PIL.Image
         img = PIL.Image.open(io.BytesIO(image_bytes))
         prompt = (
@@ -880,34 +883,33 @@ def _ocr_with_gemini_vision(image_bytes: bytes) -> str:
 
 def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -> str:
     """OCR handwritten slips: primary = Sarvam Doc AI, fallback = Gemini Vision."""
-    # --- Compress image if >350KB ---
+    # --- Normalize & auto-rotate image via PIL EXIF ---
     upload_bytes = image_bytes
     try:
-        from PIL import Image
-        if len(image_bytes) > 350 * 1024:
-            img = Image.open(io.BytesIO(image_bytes))
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            img.thumbnail((1200, 1200))
-            out_buf = io.BytesIO()
-            img.save(out_buf, format="JPEG", quality=82)
-            upload_bytes = out_buf.getvalue()
-            logger.info(f"Compressed image {len(image_bytes)} → {len(upload_bytes)} bytes")
+        from PIL import Image, ImageOps
+        img = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(img)  # auto-orient mobile camera photos
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        # Resize if large to ensure fast, reliable Sarvam processing
+        if max(img.size) > 1600 or len(image_bytes) > 400 * 1024:
+            img.thumbnail((1600, 1600))
+        out_buf = io.BytesIO()
+        img.save(out_buf, format="JPEG", quality=85)
+        upload_bytes = out_buf.getvalue()
+        logger.info(f"Normalized image for Sarvam OCR: {len(image_bytes)} → {len(upload_bytes)} bytes")
     except Exception as e:
-        logger.warning(f"Image resize error: {e}")
+        logger.warning(f"Image normalization error: {e}")
 
     # --- PRIMARY: Sarvam Document AI ---
     api_key = _get_sarvam_key()
     sarvam_result = ""
     if api_key:
         try:
-            # Force uncompressed responses — requests handles gzip but only if
-            # the server sends the right Content-Encoding header reliably
             headers = {
                 "api-subscription-key": api_key,
-                "Accept-Encoding": "identity",  # prevent gzip compression issues
             }
-            files = {"file": (filename or "slip.jpg", upload_bytes, "image/jpeg")}
+            files = {"file": ("slip.jpg", upload_bytes, "image/jpeg")}
             data = {"output_format": "md"}
 
             resp = requests.post(
@@ -919,7 +921,7 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
                 job_id = resp.json().get("job_id", "")
                 if job_id:
                     status = "pending"
-                    for _ in range(35):
+                    for _ in range(40):
                         time.sleep(1.5)
                         st_res = requests.get(
                             f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/status",
@@ -935,25 +937,38 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
                             f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/results",
                             headers=headers, timeout=15
                         )
-                        logger.info(f"Sarvam results response: {res.status_code} {res.text[:300]}")
+                        logger.info(f"Sarvam results response: {res.status_code}")
                         if res.status_code == 200:
-                            raw_blocks = []
-                            for doc in res.json().get("documents", []):
-                                for page in doc.get("pages", []):
-                                    for block in page.get("blocks", []):
-                                        txt = block.get("text", "").strip()
-                                        if txt:
-                                            raw_blocks.append(txt)
-                            merged = []
-                            for b in raw_blocks:
-                                s = b.strip()
-                                if s.startswith("=") and merged:
-                                    merged[-1] += " " + s
-                                else:
-                                    merged.append(s)
-                            sarvam_result = "\n".join(merged)
-                            if sarvam_result:
-                                logger.info(f"Sarvam OCR success: {len(sarvam_result)} chars")
+                            # Safe JSON extraction with gzip decompress fallback
+                            res_data = None
+                            try:
+                                res_data = res.json()
+                            except Exception:
+                                try:
+                                    import gzip
+                                    decompressed = gzip.decompress(res.content)
+                                    res_data = json.loads(decompressed.decode("utf-8"))
+                                except Exception as gz_err:
+                                    logger.error(f"Gzip decode error: {gz_err}")
+
+                            if res_data:
+                                raw_blocks = []
+                                for doc in res_data.get("documents", []):
+                                    for page in doc.get("pages", []):
+                                        for block in page.get("blocks", []):
+                                            txt = block.get("text", "").strip()
+                                            if txt:
+                                                raw_blocks.append(txt)
+                                merged = []
+                                for b in raw_blocks:
+                                    s = b.strip()
+                                    if s.startswith("=") and merged:
+                                        merged[-1] += " " + s
+                                    else:
+                                        merged.append(s)
+                                sarvam_result = "\n".join(merged)
+                                if sarvam_result:
+                                    logger.info(f"Sarvam OCR success: {len(sarvam_result)} chars")
                     else:
                         logger.warning(f"Sarvam job {job_id} status: {status}")
             else:
