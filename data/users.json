@@ -1,0 +1,22 @@
+{
+  "ramesh": {
+    "username": "ramesh",
+    "password_hash": "585739ffe4a423562d49c804a1e903a9854e78fa2b0e50b9038729e3584a078b",
+    "salt": "644201507d396139c5fd3410269f6ef3",
+    "merchant_name": "Ramesh Gupta",
+    "store_name": "Namaste Kirana & General Store",
+    "location": "Laxmi Nagar, Delhi NCR",
+    "phone": "+91 98765 43210",
+    "created_at": "2026-09-19 11:42:41"
+  },
+  "sharma": {
+    "username": "sharma",
+    "password_hash": "f6bfc1b22e7f3f0b3c28df9bec295620b3a485aa8135997100c4e3c32227c3d0",
+    "salt": "4f9ed446951e6cbe4d58e622d65c4f51",
+    "merchant_name": "Suresh Sharma",
+    "store_name": "Sharma Provision Store",
+    "location": "Indirapuram, Ghaziabad",
+    "phone": "919811122233",
+    "created_at": "2026-09-19 11:42:55"
+  }
+}

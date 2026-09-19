@@ -1,0 +1,104 @@
+{
+  "store_name": "Sharma Provision Store",
+  "owner": "Suresh Sharma",
+  "location": "Indirapuram, Ghaziabad",
+  "cash_in_hand": 18500.0,
+  "daily_sales_avg": 9200.0,
+  "customers_udhaar": [],
+  "inventory": [
+    {
+      "sku": "SKU-AMUL-01",
+      "name": "Amul Taaza Milk (500ml)",
+      "category": "Dairy",
+      "current_stock": 4,
+      "min_threshold": 25,
+      "unit": "packets",
+      "cost_price": 27.0,
+      "selling_price": 28.0,
+      "supplier": "Goyal Dairy Distributors",
+      "status": "LOW_STOCK"
+    },
+    {
+      "sku": "SKU-AASH-02",
+      "name": "Aashirvaad Shudh Chakki Atta (10kg)",
+      "category": "Staples",
+      "current_stock": 2,
+      "min_threshold": 12,
+      "unit": "bags",
+      "cost_price": 410.0,
+      "selling_price": 445.0,
+      "supplier": "Delhi Grain Merchants Syndicate",
+      "status": "LOW_STOCK"
+    },
+    {
+      "sku": "SKU-FORT-03",
+      "name": "Fortune Refined Mustard Oil (1L)",
+      "category": "Oils",
+      "current_stock": 6,
+      "min_threshold": 15,
+      "unit": "pouches",
+      "cost_price": 138.0,
+      "selling_price": 152.0,
+      "supplier": "Delhi Grain Merchants Syndicate",
+      "status": "LOW_STOCK"
+    },
+    {
+      "sku": "SKU-MDH-04",
+      "name": "MDH Deggi Mirch (100g)",
+      "category": "Spices",
+      "current_stock": 18,
+      "min_threshold": 8,
+      "unit": "boxes",
+      "cost_price": 82.0,
+      "selling_price": 94.0,
+      "supplier": "Gupta Kirana Wholesalers",
+      "status": "HEALTHY"
+    },
+    {
+      "sku": "SKU-SURF-05",
+      "name": "Surf Excel Quick Wash (1kg)",
+      "category": "FMCG",
+      "current_stock": 1,
+      "min_threshold": 10,
+      "unit": "packs",
+      "cost_price": 140.0,
+      "selling_price": 155.0,
+      "supplier": "HUL City Depot",
+      "status": "CRITICAL"
+    }
+  ],
+  "supplier_invoices": [
+    {
+      "invoice_id": "INV-DEL-892",
+      "supplier_name": "Delhi Grain Merchants Syndicate",
+      "phone": "+91 98222 11009",
+      "total_amount": 48500.0,
+      "due_in_days": 2,
+      "credit_terms": "Net 15 Days (2% penalty thereafter)",
+      "items": "Atta, Basmati Rice, Refined Oil batch #401",
+      "status": "UPCOMING_DEADLINE"
+    },
+    {
+      "invoice_id": "INV-GOY-331",
+      "supplier_name": "Goyal Dairy Distributors",
+      "phone": "+91 97111 88442",
+      "total_amount": 16200.0,
+      "due_in_days": 4,
+      "credit_terms": "Net 7 Days",
+      "items": "Dairy crates (Milk, Paneer, Butter)",
+      "status": "PENDING"
+    },
+    {
+      "invoice_id": "INV-HUL-109",
+      "supplier_name": "HUL City Depot",
+      "phone": "+91 99000 33441",
+      "total_amount": 12800.0,
+      "due_in_days": 9,
+      "credit_terms": "Net 21 Days",
+      "items": "Detergents & personal care stock",
+      "status": "PENDING"
+    }
+  ],
+  "action_logs": [],
+  "active_loan": null
+}

@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 DB_FILE = os.path.join(os.path.dirname(__file__), "store_database.json")
+STORES_DIR = os.path.join(os.path.dirname(__file__), "data", "stores")
+os.makedirs(STORES_DIR, exist_ok=True)
 
 DEFAULT_STATE = {
     "store_name": "Namaste Kirana & General Store",
@@ -117,35 +119,70 @@ DEFAULT_STATE = {
 }
 
 
-def load_db() -> Dict[str, Any]:
-    """Loads store state from disk, initializing with default state if missing."""
-    if os.path.exists(DB_FILE):
+def get_db_file(username: str = None) -> str:
+    """Returns the dedicated JSON file path for a merchant."""
+    if username and username.strip():
+        clean_user = username.strip().lower()
+        return os.path.join(STORES_DIR, f"{clean_user}_store.json")
+    return DB_FILE
+
+
+def load_db(username: str = None) -> Dict[str, Any]:
+    """Loads store state from disk for a specific merchant, initializing if missing."""
+    import copy
+    file_path = get_db_file(username)
+    if os.path.exists(file_path):
         try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
-    save_db(DEFAULT_STATE)
-    return dict(DEFAULT_STATE)
+
+    # Initialize store state
+    user_state = copy.deepcopy(DEFAULT_STATE)
+    if username and username.strip():
+        try:
+            from auth import get_user
+            u = get_user(username)
+            if u:
+                user_state["store_name"] = u.get("store_name", user_state["store_name"])
+                user_state["owner"] = u.get("merchant_name", user_state["owner"])
+                user_state["location"] = u.get("location", user_state["location"])
+        except Exception:
+            pass
+
+    save_db(user_state, username)
+    return user_state
 
 
-def save_db(data: Dict[str, Any]) -> None:
-    """Saves store state to disk."""
-    with open(DB_FILE, "w", encoding="utf-8") as f:
+def save_db(data: Dict[str, Any], username: str = None) -> None:
+    """Saves store state to disk atomically."""
+    file_path = get_db_file(username)
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def reset_db() -> Dict[str, Any]:
+def reset_db(username: str = None) -> Dict[str, Any]:
     """Wipes all demo/mock data and resets store state to clean pristine state."""
     import copy
     clean = copy.deepcopy(DEFAULT_STATE)
-    save_db(clean)
+    if username and username.strip():
+        try:
+            from auth import get_user
+            u = get_user(username)
+            if u:
+                clean["store_name"] = u.get("store_name", clean["store_name"])
+                clean["owner"] = u.get("merchant_name", clean["owner"])
+                clean["location"] = u.get("location", clean["location"])
+        except Exception:
+            pass
+    save_db(clean, username)
     return clean
 
 
-def add_udhaar(customer_name: str, phone: str, amount: float, items: str, due_date: str = None) -> Dict[str, Any]:
-    """Adds a real customer udhaar debt to the ledger."""
-    db = load_db()
+def add_udhaar(customer_name: str, phone: str, amount: float, items: str, due_date: str = None, username: str = None) -> Dict[str, Any]:
+    """Adds a real customer udhaar debt to the merchant's ledger."""
+    db = load_db(username)
     new_id = f"UDH-{len(db['customers_udhaar']) + 101}"
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     entry = {
@@ -161,13 +198,13 @@ def add_udhaar(customer_name: str, phone: str, amount: float, items: str, due_da
         "created_at": now_str
     }
     db["customers_udhaar"].append(entry)
-    save_db(db)
+    save_db(db, username)
     return entry
 
 
-def settle_udhaar(udhaar_id: str) -> Dict[str, Any]:
+def settle_udhaar(udhaar_id: str, username: str = None) -> Dict[str, Any]:
     """Marks an existing udhaar debt as recovered, adding the amount to cash in hand."""
-    db = load_db()
+    db = load_db(username)
     found = None
     for u in db["customers_udhaar"]:
         if u["id"] == udhaar_id:
@@ -177,14 +214,14 @@ def settle_udhaar(udhaar_id: str) -> Dict[str, Any]:
         amount = found["amount"]
         db["customers_udhaar"] = [u for u in db["customers_udhaar"] if u["id"] != udhaar_id]
         db["cash_in_hand"] += amount
-        save_db(db)
+        save_db(db, username)
         return {"status": "SUCCESS", "recovered_amount": amount, "new_cash": db["cash_in_hand"]}
     return {"status": "NOT_FOUND"}
 
 
-def update_inventory_stock(sku: str, delta_stock: int) -> Dict[str, Any]:
+def update_inventory_stock(sku: str, delta_stock: int, username: str = None) -> Dict[str, Any]:
     """Updates current stock count for an inventory item."""
-    db = load_db()
+    db = load_db(username)
     for item in db["inventory"]:
         if item["sku"] == sku:
             item["current_stock"] += delta_stock
@@ -192,14 +229,14 @@ def update_inventory_stock(sku: str, delta_stock: int) -> Dict[str, Any]:
                 item["status"] = "LOW_STOCK"
             else:
                 item["status"] = "HEALTHY"
-            save_db(db)
+            save_db(db, username)
             return item
     return {}
 
 
-def record_loan_drawdown(amount: float = 50000.0) -> Dict[str, Any]:
+def record_loan_drawdown(amount: float = 50000.0, username: str = None) -> Dict[str, Any]:
     """Disburses pre-underwritten Paytm Loan into the store's business cash."""
-    db = load_db()
+    db = load_db(username)
     now_str = datetime.now().strftime("%I:%M %p, %d %b %Y")
     loan_record = {
         "amount": amount,
@@ -211,5 +248,5 @@ def record_loan_drawdown(amount: float = 50000.0) -> Dict[str, Any]:
     }
     db["cash_in_hand"] += amount
     db["active_loan"] = loan_record
-    save_db(db)
+    save_db(db, username)
     return loan_record

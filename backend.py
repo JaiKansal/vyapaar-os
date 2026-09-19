@@ -28,6 +28,7 @@ from database import (
     update_inventory_stock,
     record_loan_drawdown
 )
+from auth import register_user, authenticate_user, get_user
 from sample_data import SAMPLE_KACHA_BILLS
 
 app = FastAPI(
@@ -228,9 +229,9 @@ def synthesize_spoken_hindi(text: str) -> str:
 
 
 # --- DETERMINISTIC ACTION GUARDRAILS ---
-def log_and_execute_action(action_type: str, payload: Dict[str, Any], description: str) -> Dict[str, Any]:
+def log_and_execute_action(action_type: str, payload: Dict[str, Any], description: str, username: Optional[str] = None) -> Dict[str, Any]:
     """Records deterministic audit log and triggers n8n webhook."""
-    db = load_db()
+    db = load_db(username)
     timestamp = datetime.now().strftime("%I:%M %p, %d %b")
     
     n8n_status = "Deterministic Engine (Local Guardrail Verified)"
@@ -258,7 +259,7 @@ def log_and_execute_action(action_type: str, payload: Dict[str, Any], descriptio
     if "action_logs" not in db:
         db["action_logs"] = []
     db["action_logs"].insert(0, log_entry)
-    save_db(db)
+    save_db(db, username)
     return log_entry
 
 
@@ -274,6 +275,41 @@ def health_check():
         "sarvam_connected": bool(SARVAM_API_KEY),
         "data_mode": "REAL_PERSISTENT_STORE"
     }
+
+# --- MERCHANT AUTHENTICATION ENDPOINTS ---
+
+@app.post("/api/auth/signup")
+def api_signup(
+    username: str = Form(...),
+    password: str = Form(...),
+    merchant_name: str = Form(...),
+    store_name: str = Form(...),
+    location: Optional[str] = Form("Delhi NCR, India"),
+    phone: Optional[str] = Form("")
+):
+    """Registers a new kirana merchant and initializes their isolated, persistent store database."""
+    ok, msg, profile = register_user(username, password, merchant_name, store_name, location or "", phone or "")
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    # Automatically initialize their isolated store database
+    load_db(username)
+    return {"status": "SUCCESS", "message": msg, "profile": profile}
+
+@app.post("/api/auth/login")
+def api_login(username: str = Form(...), password: str = Form(...)):
+    """Authenticates merchant credentials."""
+    ok, msg, profile = authenticate_user(username, password)
+    if not ok:
+        raise HTTPException(status_code=401, detail=msg)
+    return {"status": "SUCCESS", "message": msg, "profile": profile}
+
+@app.get("/api/auth/profile")
+def api_profile(username: str):
+    """Fetches merchant public profile."""
+    profile = get_user(username)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Merchant not found.")
+    return {"status": "SUCCESS", "profile": profile}
 
 @app.get("/api/config/credentials")
 def get_credentials_status():
@@ -295,7 +331,7 @@ def update_api_keys(sarvam_key: Optional[str] = Form(None)):
         os.environ["OPENAI_API_KEY"] = SARVAM_API_KEY
 
 @app.post("/api/cognee/query")
-async def cognee_query(query_text: str = Form(...)):
+async def cognee_query(query_text: str = Form(...), username: Optional[str] = Form(None)):
     """Allows native semantic graph search across the Cognee dataset with deterministic fallback."""
     try:
         import cognee
@@ -313,7 +349,7 @@ async def cognee_query(query_text: str = Form(...)):
         }
     except Exception as e:
         # Graceful fallback that returns a deterministic response using the load_db() helper
-        db = load_db()
+        db = load_db(username)
         lower_q = query_text.lower()
         matched_udhaar = [u for u in db.get("customers_udhaar", []) if any(term in str(u).lower() for term in lower_q.split())]
         matched_inventory = [i for i in db.get("inventory", []) if any(term in str(i).lower() for term in lower_q.split())]
@@ -336,54 +372,60 @@ async def cognee_query(query_text: str = Form(...)):
         }
 
 @app.get("/api/store-state")
-def get_store_state():
-    """Returns the live, persistent store ledger data."""
-    db = load_db()
-    total_udhaar = sum(float(u["amount"]) for u in db["customers_udhaar"])
-    total_supplier_dues = sum(float(s["total_amount"]) for s in db["supplier_invoices"])
-    low_stock_count = sum(1 for i in db["inventory"] if i["current_stock"] <= i["min_threshold"])
+def get_store_state(username: Optional[str] = None):
+    """Returns the live, persistent store ledger data for the specific merchant."""
+    db = load_db(username)
+    total_udhaar = sum(float(u["amount"]) for u in db.get("customers_udhaar", []))
+    total_supplier_dues = sum(float(s["total_amount"]) for s in db.get("supplier_invoices", []))
+    low_stock_count = sum(1 for i in db.get("inventory", []) if i["current_stock"] <= i["min_threshold"])
     
     # Margin leak calculations (Slide 2: up to 14% margin leak prevented)
-    monthly_sales_estimate = db["daily_sales_avg"] * 30
+    monthly_sales_estimate = db.get("daily_sales_avg", 9200.0) * 30
     margin_leak_prevented = monthly_sales_estimate * 0.14
 
     return {
-        "store_name": db["store_name"],
-        "owner": db["owner"],
-        "location": db["location"],
-        "cash_in_hand": db["cash_in_hand"],
-        "daily_sales_avg": db["daily_sales_avg"],
+        "store_name": db.get("store_name", "Namaste Kirana & General Store"),
+        "owner": db.get("owner", "Ramesh Gupta"),
+        "location": db.get("location", "Laxmi Nagar, Delhi NCR"),
+        "cash_in_hand": db.get("cash_in_hand", 18500.0),
+        "daily_sales_avg": db.get("daily_sales_avg", 9200.0),
         "total_udhaar_outstanding": total_udhaar,
         "total_supplier_dues": total_supplier_dues,
         "low_stock_items_count": low_stock_count,
         "margin_leak_saved": margin_leak_prevented,
-        "customers_udhaar": db["customers_udhaar"],
-        "inventory": db["inventory"],
-        "supplier_invoices": db["supplier_invoices"],
+        "customers_udhaar": db.get("customers_udhaar", []),
+        "inventory": db.get("inventory", []),
+        "supplier_invoices": db.get("supplier_invoices", []),
         "action_logs": db.get("action_logs", [])[:15],
         "active_loan": db.get("active_loan")
     }
 
 @app.post("/api/udhaar/add")
-def api_add_udhaar(customer_name: str = Form(...), phone: str = Form(...), amount: float = Form(...), items: str = Form(...)):
-    """Adds a real customer udhaar debt directly."""
-    entry = add_udhaar(customer_name, phone, amount, items)
-    log_and_execute_action("MANUAL_UDHAAR_ADD", entry, f"Recorded udhaar of ₹{amount:,.2f} for {customer_name}")
+def api_add_udhaar(
+    customer_name: str = Form(...),
+    phone: str = Form(...),
+    amount: float = Form(...),
+    items: str = Form(...),
+    username: Optional[str] = Form(None)
+):
+    """Adds a real customer udhaar debt directly to the merchant's ledger."""
+    entry = add_udhaar(customer_name, phone, amount, items, username=username)
+    log_and_execute_action("MANUAL_UDHAAR_ADD", entry, f"Recorded udhaar of ₹{amount:,.2f} for {customer_name}", username=username)
     return {"status": "SUCCESS", "entry": entry}
 
 @app.post("/api/udhaar/settle")
-def api_settle_udhaar(udhaar_id: str = Form(...)):
+def api_settle_udhaar(udhaar_id: str = Form(...), username: Optional[str] = Form(None)):
     """Settles a customer udhaar debt, depositing money into drawer cash."""
-    res = settle_udhaar(udhaar_id)
+    res = settle_udhaar(udhaar_id, username=username)
     if res.get("status") == "SUCCESS":
-        log_and_execute_action("UDHAAR_RECOVERED", res, f"Recovered ₹{res['recovered_amount']:,.2f} udhaar (Deposited to Cash Drawer)")
+        log_and_execute_action("UDHAAR_RECOVERED", res, f"Recovered ₹{res['recovered_amount']:,.2f} udhaar (Deposited to Cash Drawer)", username=username)
     return res
 
 @app.post("/api/inventory/update")
-def api_update_stock(sku: str = Form(...), delta_stock: int = Form(...)):
+def api_update_stock(sku: str = Form(...), delta_stock: int = Form(...), username: Optional[str] = Form(None)):
     """Updates inventory stock level."""
-    res = update_inventory_stock(sku, delta_stock)
-    log_and_execute_action("STOCK_UPDATE", res, f"Updated stock for {sku} by {delta_stock} units")
+    res = update_inventory_stock(sku, delta_stock, username=username)
+    log_and_execute_action("STOCK_UPDATE", res, f"Updated stock for {sku} by {delta_stock} units", username=username)
     return res
 
 
@@ -459,13 +501,14 @@ async def stt_endpoint(audio_file: UploadFile = File(...)):
 async def process_voice(
     background_tasks: BackgroundTasks,
     file: Optional[UploadFile] = File(None),
-    raw_text_input: Optional[str] = Form(None)
+    raw_text_input: Optional[str] = Form(None),
+    username: Optional[str] = Form(None)
 ):
     """
     Direct Voice Processing:
     Transcribes live microphone audio, extracts entities, and mutates real store database!
     """
-    db = load_db()
+    db = load_db(username)
     transcript = ""
     
     if file:
@@ -693,7 +736,7 @@ async def process_voice(
         # 3. Extract customer name
         name = extract_customer_name(eval_text)
 
-        new_entry = add_udhaar(name, "+91 98765 00000", amount, "आवाज़ से दर्ज किराना उधार", due_date)
+        new_entry = add_udhaar(name, "+91 98765 00000", amount, "आवाज़ से दर्ज किराना उधार", due_date, username=username)
 
         due_str = f" — वापसी तारीख: {due_date}" if due_date else ""
         audio_response_text = (
@@ -701,7 +744,8 @@ async def process_voice(
         )
         action_log = log_and_execute_action(
             "RECORD_UDHAAR", new_entry,
-            f"Spoken udhaar recorded: {name} owes ₹{amount:,.2f}, due: {due_date or 'unspecified'}"
+            f"Spoken udhaar recorded: {name} owes ₹{amount:,.2f}, due: {due_date or 'unspecified'}",
+            username=username
         )
         action_desc = action_log["description"]
 
@@ -715,7 +759,7 @@ async def process_voice(
         
         payload = {"item": item_name, "quantity": qty, "supplier": "Goyal Dairy Distributors"}
         audio_response_text = f"{item_name} के {qty} पैकेट का रीस्टॉक ऑर्डर डिस्ट्रीब्यूटर को n8n के जरिए भेज दिया गया है।"
-        action_log = log_and_execute_action("DISTRIBUTOR_RESTOCK_CALL", payload, f"Automated restocking order placed for {qty}x {item_name}")
+        action_log = log_and_execute_action("DISTRIBUTOR_RESTOCK_CALL", payload, f"Automated restocking order placed for {qty}x {item_name}", username=username)
         action_desc = action_log["description"]
 
     # Check for udhaar recovery reminder request
@@ -723,28 +767,28 @@ async def process_voice(
         intent = "RECOVER_UDHAAR"
         target_customer = "अनिल कुमार (ढाबा)"
         target_amount = 4800.0
-        for u in db["customers_udhaar"]:
+        for u in db.get("customers_udhaar", []):
             if "अनिल" in u["customer_name"]:
                 target_amount = u["amount"]
                 break
                 
         payload = {"customer": target_customer, "phone": "+91 99223 88441", "amount": target_amount}
         audio_response_text = f"{target_customer} को {target_amount:,.0f} रुपये का विनम्र व्हाट्सएप ऑडियो नोट भेज दिया गया है।"
-        action_log = log_and_execute_action("WHATSAPP_UDHAAR_REMINDER", payload, f"WhatsApp audio reminder dispatched to {target_customer} for ₹{target_amount:,.2f}")
+        action_log = log_and_execute_action("WHATSAPP_UDHAAR_REMINDER", payload, f"WhatsApp audio reminder dispatched to {target_customer} for ₹{target_amount:,.2f}", username=username)
         action_desc = action_log["description"]
 
     # Check for cashflow / supplier query
     elif any(w in lower_t for w in ["सप्लायर", "गल्ले", "पैसे", "हिसाब", "कैश", "लोन", "deficit", "balance"]):
         intent = "CHECK_CASHFLOW"
-        cash = db["cash_in_hand"]
+        cash = db.get("cash_in_hand", 18500.0)
         audio_response_text = f"गल्ले में ₹{cash:,.0f} नकद उपलब्ध हैं। अगले 48 घंटों में ₹48,500 के सप्लायर भुगतान देय हैं। पेटीएम 50,000 रुपये का स्मार्ट लोन तैयार है।"
-        action_log = log_and_execute_action("CASHFLOW_QUERY", {"cash_in_hand": cash}, "Spoken cashflow inquiry answered")
+        action_log = log_and_execute_action("CASHFLOW_QUERY", {"cash_in_hand": cash}, "Spoken cashflow inquiry answered", username=username)
         action_desc = action_log["description"]
 
     else:
         intent = "STORE_UPDATE"
         audio_response_text = f"आपकी बात नोट कर ली गई है: {transcript}"
-        action_log = log_and_execute_action("VOICE_MEMO", {"text": transcript}, f"Recorded merchant voice memo: '{transcript}'")
+        action_log = log_and_execute_action("VOICE_MEMO", {"text": transcript}, f"Recorded merchant voice memo: '{transcript}'", username=username)
         action_desc = action_log["description"]
 
     # Real Cognee memory graph update
@@ -958,7 +1002,8 @@ async def process_slip(
     background_tasks: BackgroundTasks,
     slip_id: Optional[str] = Form(None),
     raw_text_input: Optional[str] = Form(None),
-    file: Optional[UploadFile] = File(None)
+    file: Optional[UploadFile] = File(None),
+    username: Optional[str] = Form(None)
 ):
     """Extracts structured entities directly from uploaded kacha bills using Sarvam AI Document Intelligence and updates real store database."""
     raw_text = ""
@@ -995,12 +1040,12 @@ async def process_slip(
     # Parse kacha slip text into structured debts
     new_udhaars = parse_kacha_slip_text(raw_text)
     for item in new_udhaars:
-        add_udhaar(item["customer"], "+91 98765 00000", float(item["amount"]), item["items"], item.get("due_date"))
+        add_udhaar(item["customer"], "+91 98765 00000", float(item["amount"]), item["items"], item.get("due_date"), username=username)
 
     extracted_data = {"new_udhaars": new_udhaars}
 
     background_tasks.add_task(process_cognee_memory, f"Kacha Bill Ingestion: {raw_text}")
-    action_log = log_and_execute_action("SLIP_INGESTED", extracted_data, f"Ingested kacha slip '{title}' into real ledger")
+    action_log = log_and_execute_action("SLIP_INGESTED", extracted_data, f"Ingested kacha slip '{title}' into real ledger", username=username)
 
     return {
         "slip_title": title,
@@ -1012,11 +1057,11 @@ async def process_slip(
 
 
 @app.get("/api/predict-cashflow")
-def predict_cashflow():
+def predict_cashflow(username: Optional[str] = None):
     """Predicts real 7-day cash flow gap using active database values."""
-    db = load_db()
-    cash_in_hand = db["cash_in_hand"]
-    daily_sales = db["daily_sales_avg"]
+    db = load_db(username)
+    cash_in_hand = db.get("cash_in_hand", 18500.0)
+    daily_sales = db.get("daily_sales_avg", 9200.0)
     
     timeline = []
     current_balance = cash_in_hand
@@ -1029,9 +1074,9 @@ def predict_cashflow():
         udhaar_recovery = 2000.0 if day == 2 else (1500.0 if day == 4 else 500.0)
         
         supplier_outflow = 0.0
-        for inv in db["supplier_invoices"]:
-            if inv["due_in_days"] == day:
-                supplier_outflow += float(inv["total_amount"])
+        for inv in db.get("supplier_invoices", []):
+            if inv.get("due_in_days") == day:
+                supplier_outflow += float(inv.get("total_amount", 0.0))
         
         net_change = daily_inflow + udhaar_recovery - supplier_outflow
         current_balance += net_change
@@ -1077,11 +1122,11 @@ def predict_cashflow():
 
 
 @app.post("/api/loan/drawdown")
-def drawdown_paytm_loan():
+def drawdown_paytm_loan(username: Optional[str] = Form(None)):
     """Slide 5: Real 1-Click Drawdown of pre-underwritten Paytm Loan into cash balance."""
-    loan = record_loan_drawdown(50000.0)
-    action = log_and_execute_action("PAYTM_LOAN_DRAWDOWN", loan, "₹50,000 Paytm Smart Micro-Loan disbursed into Business Wallet")
-    db = load_db()
+    loan = record_loan_drawdown(50000.0, username=username)
+    action = log_and_execute_action("PAYTM_LOAN_DRAWDOWN", loan, "₹50,000 Paytm Smart Micro-Loan disbursed into Business Wallet", username=username)
+    db = load_db(username)
     return {
         "status": "SUCCESS",
         "message": "₹50,000 disbursed instantly into Paytm Business Wallet.",
@@ -1092,23 +1137,23 @@ def drawdown_paytm_loan():
 
 
 @app.get("/api/knowledge-graph")
-def get_knowledge_graph():
+def get_knowledge_graph(username: Optional[str] = None):
     """Returns dynamic graph nodes & relations generated from real database entities."""
-    db = load_db()
-    nodes = [{"id": "STORE", "label": db["store_name"], "group": "STORE", "size": 30}]
+    db = load_db(username)
+    nodes = [{"id": "STORE", "label": db.get("store_name", "Kirana Store"), "group": "STORE", "size": 30}]
     links = []
 
-    for idx, s in enumerate(db["supplier_invoices"]):
+    for idx, s in enumerate(db.get("supplier_invoices", [])):
         s_id = f"SUPP_{idx+1}"
         nodes.append({"id": s_id, "label": f"{s['supplier_name']} (Due: ₹{s['total_amount']:,.0f})", "group": "SUPPLIER", "size": 22})
         links.append({"source": "STORE", "target": s_id, "relation": "OWES_SUPPLIER", "value": f"₹{s['total_amount']:,.0f} due in {s['due_in_days']} days"})
 
-    for idx, i in enumerate(db["inventory"][:4]):
+    for idx, i in enumerate(db.get("inventory", [])[:4]):
         inv_id = f"INV_{idx+1}"
         nodes.append({"id": inv_id, "label": f"{i['name']} (Stock: {i['current_stock']})", "group": "INVENTORY", "size": 18})
         links.append({"source": "STORE", "target": inv_id, "relation": "STOCKS", "value": f"{i['current_stock']} units"})
 
-    for idx, u in enumerate(db["customers_udhaar"][:5]):
+    for idx, u in enumerate(db.get("customers_udhaar", [])[:5]):
         u_id = f"CUST_{idx+1}"
         nodes.append({"id": u_id, "label": f"{u['customer_name']} (Owes: ₹{u['amount']:,.0f})", "group": "UDHAAR", "size": 18})
         links.append({"source": u_id, "target": "STORE", "relation": "OWES_UDHAAR", "value": f"₹{u['amount']:,.0f}"})
@@ -1121,7 +1166,7 @@ def get_knowledge_graph():
 
 
 @app.post("/api/reset-db")
-def reset_database_endpoint():
+def reset_database_endpoint(username: Optional[str] = Form(None)):
     """Resets the store database to clean demo state (0 udhaars, 0 action logs)."""
-    clean_state = reset_db()
+    clean_state = reset_db(username)
     return {"status": "SUCCESS", "message": "Database reset to clean demo state", "data": clean_state}
