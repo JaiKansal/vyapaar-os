@@ -1599,6 +1599,8 @@ with tab_parchi:
                             res_json = _direct_process_slip(raw_text_input=None, username=st.session_state.get("username", "ramesh"))
 
                         if res_json.get("error"):
+                            st.session_state.pop('slip_result', None)
+                            st.session_state.pop('extracted_raw_text', None)
                             st.error(res_json.get("error"))
                         else:
                             st.session_state['slip_result'] = res_json
@@ -1638,6 +1640,9 @@ with tab_parchi:
                             res_json = _direct_process_slip(active_image_bytes, active_image_filename, username=st.session_state.get("username", "ramesh"))
 
                         if res_json.get("error"):
+                            # Clear stale results so right column goes blank
+                            st.session_state.pop('slip_result', None)
+                            st.session_state.pop('extracted_raw_text', None)
                             st.error(res_json.get("error"))
                         else:
                             st.session_state['slip_result'] = res_json

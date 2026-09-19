@@ -841,96 +841,127 @@ def sarvam_chat(
     return JSONResponse(status_code=500, content={"status": "error", "message": "Sarvam LLM completion failed"})
 
 
-def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -> str:
-    """Uses Sarvam AI Document Intelligence API (Sarvam Vision 1.5) to directly OCR handwritten slips."""
-    api_key = _get_sarvam_key()  # Always resolve fresh — never use stale module-level constant
-    if not api_key:
-        logger.warning("SARVAM_API_KEY not configured for document digitisation.")
+def _ocr_with_gemini_vision(image_bytes: bytes) -> str:
+    """Fallback OCR using Gemini Vision when Sarvam Doc AI fails."""
+    try:
+        import google.generativeai as genai
+        gemini_key = ""
+        try:
+            import streamlit as _st
+            if hasattr(_st, "secrets") and "GEMINI_API_KEY" in _st.secrets:
+                gemini_key = _st.secrets["GEMINI_API_KEY"]
+        except Exception:
+            pass
+        if not gemini_key:
+            gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        if not gemini_key:
+            return ""
+
+        genai.configure(api_key=gemini_key)
+        # Use gemini-1.5-flash for vision (fast + multimodal)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        import PIL.Image
+        img = PIL.Image.open(io.BytesIO(image_bytes))
+        prompt = (
+            "This is a handwritten kirana/shop receipt or ledger slip (possibly in Hindi/Devanagari or mixed script). "
+            "Extract ALL visible text exactly as written, line by line. "
+            "Preserve names, item descriptions, quantities, and rupee amounts. "
+            "Output only the raw extracted text, nothing else."
+        )
+        response = model.generate_content([prompt, img])
+        extracted = response.text.strip() if response.text else ""
+        if extracted:
+            logger.info(f"Gemini Vision OCR extracted {len(extracted)} chars")
+        return extracted
+    except Exception as e:
+        logger.warning(f"Gemini Vision OCR failed: {e}")
         return ""
 
+
+def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -> str:
+    """OCR handwritten slips: primary = Sarvam Doc AI, fallback = Gemini Vision."""
+    # --- Compress image if >350KB ---
+    upload_bytes = image_bytes
     try:
         from PIL import Image
-        # Optimize / compress image if > 400KB to ensure instant upload without connection write timeout
-        upload_bytes = image_bytes
         if len(image_bytes) > 350 * 1024:
-            try:
-                img = Image.open(io.BytesIO(image_bytes))
-                if img.mode in ("RGBA", "P"):
-                    img = img.convert("RGB")
-                img.thumbnail((1200, 1200))
-                out_buf = io.BytesIO()
-                img.save(out_buf, format="JPEG", quality=82)
-                upload_bytes = out_buf.getvalue()
-                logger.info(f"Optimized slip image from {len(image_bytes)} to {len(upload_bytes)} bytes")
-            except Exception as e:
-                logger.warning(f"Image resize exception: {e}")
-
-        headers = {"api-subscription-key": api_key}
-        files = {"file": (filename or "slip.jpg", upload_bytes, "image/jpeg")}
-        data = {"output_format": "md"}
-
-        # 1. Start digitisation job with 60s timeout
-        resp = requests.post(
-            "https://api.sarvam.ai/doc-ai/v1/job/digitise",
-            headers=headers,
-            files=files,
-            data=data,
-            timeout=60
-        )
-        if resp.status_code not in [200, 201]:
-            logger.error(f"Sarvam doc-ai digitise start failed ({resp.status_code}): {resp.text}")
-            return ""
-
-        job_id = resp.json().get("job_id")
-        if not job_id:
-            logger.error("No job_id returned by Sarvam Document AI")
-            return ""
-
-        # 2. Poll for completion up to 35 iterations (~50s)
-        status = "pending"
-        for _ in range(35):
-            time.sleep(1.5)
-            st_res = requests.get(f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/status", headers=headers, timeout=15)
-            if st_res.status_code == 200:
-                status = st_res.json().get("status")
-                if status in ["completed", "failed", "rejected"]:
-                    break
-
-        if status != "completed":
-            logger.warning(f"Sarvam Document AI job {job_id} finished with status: {status}")
-            return ""
-
-        # 3. Retrieve results
-        res = requests.get(f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/results", headers=headers, timeout=15)
-        if res.status_code != 200:
-            logger.error(f"Failed to fetch Sarvam Document AI results: {res.text}")
-            return ""
-
-        res_data = res.json()
-        raw_blocks = []
-        for doc in res_data.get("documents", []):
-            for page in doc.get("pages", []):
-                for block in page.get("blocks", []):
-                    txt = block.get("text", "").strip()
-                    if txt:
-                        raw_blocks.append(txt)
-
-        # Merge blocks starting with '=' into previous line (e.g. '= ₹ 850')
-        merged_lines = []
-        for b in raw_blocks:
-            s = b.strip()
-            if s.startswith("=") and merged_lines:
-                merged_lines[-1] = merged_lines[-1] + " " + s
-            else:
-                merged_lines.append(s)
-
-        extracted_text = "\n".join(merged_lines)
-        logger.info(f"Sarvam Document AI successfully extracted text:\n{extracted_text}")
-        return extracted_text
-
+            img = Image.open(io.BytesIO(image_bytes))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            img.thumbnail((1200, 1200))
+            out_buf = io.BytesIO()
+            img.save(out_buf, format="JPEG", quality=82)
+            upload_bytes = out_buf.getvalue()
+            logger.info(f"Compressed image {len(image_bytes)} → {len(upload_bytes)} bytes")
     except Exception as e:
-        logger.error(f"Exception during Sarvam document digitisation: {e}")
-        return ""
+        logger.warning(f"Image resize error: {e}")
+
+    # --- PRIMARY: Sarvam Document AI ---
+    api_key = _get_sarvam_key()
+    sarvam_result = ""
+    if api_key:
+        try:
+            headers = {"api-subscription-key": api_key}
+            files = {"file": (filename or "slip.jpg", upload_bytes, "image/jpeg")}
+            data = {"output_format": "md"}
+
+            resp = requests.post(
+                "https://api.sarvam.ai/doc-ai/v1/job/digitise",
+                headers=headers, files=files, data=data, timeout=60
+            )
+            if resp.status_code in [200, 201]:
+                job_id = resp.json().get("job_id", "")
+                if job_id:
+                    status = "pending"
+                    for _ in range(35):
+                        time.sleep(1.5)
+                        st_res = requests.get(
+                            f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/status",
+                            headers=headers, timeout=15
+                        )
+                        if st_res.status_code == 200:
+                            status = st_res.json().get("status", "")
+                            if status in ["completed", "failed", "rejected"]:
+                                break
+
+                    if status == "completed":
+                        res = requests.get(
+                            f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/results",
+                            headers=headers, timeout=15
+                        )
+                        if res.status_code == 200:
+                            raw_blocks = []
+                            for doc in res.json().get("documents", []):
+                                for page in doc.get("pages", []):
+                                    for block in page.get("blocks", []):
+                                        txt = block.get("text", "").strip()
+                                        if txt:
+                                            raw_blocks.append(txt)
+                            merged = []
+                            for b in raw_blocks:
+                                s = b.strip()
+                                if s.startswith("=") and merged:
+                                    merged[-1] += " " + s
+                                else:
+                                    merged.append(s)
+                            sarvam_result = "\n".join(merged)
+                            if sarvam_result:
+                                logger.info(f"Sarvam OCR success: {len(sarvam_result)} chars")
+                    else:
+                        logger.warning(f"Sarvam job {job_id} status: {status}")
+            else:
+                logger.error(f"Sarvam doc-ai failed ({resp.status_code}): {resp.text[:200]}")
+        except Exception as e:
+            logger.error(f"Sarvam doc-ai exception: {e}")
+    else:
+        logger.warning("SARVAM_API_KEY not set — skipping Sarvam OCR")
+
+    if sarvam_result:
+        return sarvam_result
+
+    # --- FALLBACK: Gemini Vision ---
+    logger.info("Sarvam OCR returned empty — trying Gemini Vision fallback")
+    return _ocr_with_gemini_vision(upload_bytes)
 
 
 def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
