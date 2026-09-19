@@ -14,6 +14,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- INJECT SECRETS INTO os.environ BEFORE BACKEND STARTS ---
+# os.environ is shared across all threads in the same process.
+# By injecting here (main Streamlit thread, where st.secrets is fully ready),
+# the uvicorn background thread will see the correct keys immediately.
+_SECRET_KEYS = [
+    "SARVAM_API_KEY", "SARVAM_MODEL",
+    "GEMINI_API_KEY", "GEMINI_MODEL",
+    "N8N_WEBHOOK_URL", "COGNEE_API_KEY",
+]
+try:
+    for _k in _SECRET_KEYS:
+        if _k in st.secrets and st.secrets[_k]:
+            os.environ[_k] = st.secrets[_k]
+except Exception:
+    pass  # Running locally without st.secrets — .env file handles this
+
 # --- CLOUD & LOCAL BACKEND AUTO-DISCOVERY / AUTO-START ---
 def _find_backend_url():
     # 1. Check if backend is already listening locally
