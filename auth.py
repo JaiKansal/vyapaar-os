@@ -18,6 +18,9 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 
+BACKUP_USERS_FILE = "/tmp/vyapaar_users_backup.json"
+
+
 def _hash_password(password: str, salt: Optional[str] = None) -> Tuple[str, str]:
     """Hashes password with SHA-256 and unique 16-byte hex salt."""
     if not salt:
@@ -27,34 +30,83 @@ def _hash_password(password: str, salt: Optional[str] = None) -> Tuple[str, str]
 
 
 def _load_users() -> Dict[str, Any]:
-    """Loads user dictionary from persistent storage."""
+    """Loads user dictionary from persistent storage, merging with /tmp backup if git pull wiped users.json."""
+    users = {}
     if os.path.exists(USERS_FILE):
         try:
             with open(USERS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                users = json.load(f)
         except Exception:
             pass
-    # Seed default demo merchant if empty
-    users = {}
-    default_hash, default_salt = _hash_password("kirana123")
-    users["ramesh"] = {
-        "username": "ramesh",
-        "password_hash": default_hash,
-        "salt": default_salt,
-        "merchant_name": "Ramesh Gupta",
-        "store_name": "Namaste Kirana & General Store",
-        "location": "Laxmi Nagar, Delhi NCR",
-        "phone": "+91 98765 43210",
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    _save_users(users)
+
+    # Merge from /tmp backup (which survives git pull & container re-runs)
+    if os.path.exists(BACKUP_USERS_FILE):
+        try:
+            with open(BACKUP_USERS_FILE, "r", encoding="utf-8") as f:
+                backup_users = json.load(f)
+                dirty = False
+                for u_key, u_val in backup_users.items():
+                    if u_key not in users:
+                        users[u_key] = u_val
+                        dirty = True
+                if dirty:
+                    _save_users(users)
+        except Exception:
+            pass
+
+    if not users:
+        # Seed default demo merchant if empty
+        default_hash, default_salt = _hash_password("kirana123")
+        users["ramesh"] = {
+            "username": "ramesh",
+            "password_hash": default_hash,
+            "salt": default_salt,
+            "merchant_name": "Ramesh Gupta",
+            "store_name": "Namaste Kirana & General Store",
+            "location": "Laxmi Nagar, Delhi NCR",
+            "phone": "+91 98765 43210",
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        _save_users(users)
+
     return users
 
 
 def _save_users(users: Dict[str, Any]) -> None:
-    """Persists user dictionary to disk atomically."""
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=2, ensure_ascii=False)
+    """Persists user dictionary to disk and /tmp backup atomically."""
+    try:
+        with open(USERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving users file: {e}")
+
+    try:
+        with open(BACKUP_USERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving backup users file: {e}")
+
+
+def restore_user_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Auto-restores a user profile from URL session token or query param if missing."""
+    clean_user = profile.get("username", "").strip().lower()
+    if not clean_user:
+        return profile
+    users = _load_users()
+    if clean_user not in users:
+        pwd_hash, salt = _hash_password("kirana123")
+        users[clean_user] = {
+            "username": clean_user,
+            "password_hash": pwd_hash,
+            "salt": salt,
+            "merchant_name": profile.get("merchant_name") or clean_user.capitalize(),
+            "store_name": profile.get("store_name") or f"{clean_user.capitalize()}'s Kirana Store",
+            "location": profile.get("location") or "Delhi NCR, India",
+            "phone": profile.get("phone") or "",
+            "created_at": profile.get("created_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        _save_users(users)
+    return get_user(clean_user) or profile
 
 
 def get_user(username: str) -> Optional[Dict[str, Any]]:

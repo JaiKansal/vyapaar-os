@@ -1,8 +1,8 @@
 {
   "ramesh": {
     "username": "ramesh",
-    "password_hash": "585739ffe4a423562d49c804a1e903a9854e78fa2b0e50b9038729e3584a078b",
-    "salt": "644201507d396139c5fd3410269f6ef3",
+    "password_hash": "52da67d0e7f5254686792b420831e9f5a6a820cc909671de82bac3b170b04aa6",
+    "salt": "13bfd742e9abbf1738e207102cabc9c3",
     "merchant_name": "Ramesh Gupta",
     "store_name": "Namaste Kirana & General Store",
     "location": "Laxmi Nagar, Delhi NCR",

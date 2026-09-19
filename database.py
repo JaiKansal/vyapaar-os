@@ -127,10 +127,25 @@ def get_db_file(username: str = None) -> str:
     return DB_FILE
 
 
+BACKUP_STORES_DIR = "/tmp/vyapaar_stores_backup"
+os.makedirs(BACKUP_STORES_DIR, exist_ok=True)
+
+
 def load_db(username: str = None) -> Dict[str, Any]:
     """Loads store state from disk for a specific merchant, initializing if missing."""
     import copy
     file_path = get_db_file(username)
+
+    # If file missing on disk, check /tmp backup (survives git pulls and container rebuilds)
+    if not os.path.exists(file_path) and username and username.strip():
+        backup_path = os.path.join(BACKUP_STORES_DIR, f"{username.strip().lower()}_store.json")
+        if os.path.exists(backup_path):
+            try:
+                import shutil
+                shutil.copyfile(backup_path, file_path)
+            except Exception:
+                pass
+
     if os.path.exists(file_path):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -166,10 +181,22 @@ def load_db(username: str = None) -> Dict[str, Any]:
 
 
 def save_db(data: Dict[str, Any], username: str = None) -> None:
-    """Saves store state to disk atomically."""
+    """Saves store state to disk and /tmp backup atomically."""
     file_path = get_db_file(username)
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving store db: {e}")
+
+    # Also persist to /tmp backup
+    if username and username.strip():
+        backup_path = os.path.join(BACKUP_STORES_DIR, f"{username.strip().lower()}_store.json")
+        try:
+            with open(backup_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
 
 
 def reset_db(username: str = None) -> Dict[str, Any]:
