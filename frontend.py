@@ -35,6 +35,14 @@ try:
 except Exception as e:
     print(f"Notice: module-level backend import warning: {e}")
 
+# --- CUSTOM MUNIMJI HANDS-FREE COMPONENT ---
+_COMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "components", "munimji_wake")
+try:
+    munimji_wake_component = components.declare_component("munimji_wake", path=_COMP_DIR)
+except Exception as _ex:
+    print(f"Custom component declaration notice: {_ex}")
+    munimji_wake_component = None
+
 # --- CLOUD & LOCAL BACKEND AUTO-DISCOVERY / AUTO-START ---
 def _find_backend_url():
     # 1. Check if backend is already listening locally
@@ -362,11 +370,31 @@ def _direct_process_voice(audio_bytes=None, filename=None, raw_text_input=None, 
         return {"error": "Could not extract speech from audio."}
 
     lower_t = transcript.lower()
-    wake_word_detected = any(w in lower_t for w in ["नमस्ते मुनीमजी", "हे मुनीमजी", "hey munimji", "ok munimji", "munimji", "मुनीमजी"])
+    wake_variants = [
+        "नमस्ते मुनीमजी", "नमस्ते मुनीम जी", "हे मुनीमजी", "हे मुनीम जी",
+        "सुनो मुनीमजी", "मुनीमजी", "मुनीम जी", "hey munimji", "hey munim",
+        "ok munimji", "namaste munimji", "munimji"
+    ]
+    wake_word_detected = any(w in lower_t for w in wake_variants)
 
     eval_text = transcript
-    for p in ["नमस्ते मुनीमजी", "हे मुनीमजी", "hey munimji", "ok munimji", "मुनीमजी"]:
+    for p in wake_variants:
         eval_text = eval_text.replace(p, "").strip()
+
+    if not eval_text or len(eval_text) == 0:
+        audio_response_text = "हाँ जी, मुनीमजी हाज़िर है। बताइए क्या हिसाब लिखना है या क्या आर्डर करना है?"
+        b64_audio = backend.synthesize_spoken_hindi(audio_response_text)
+        return {
+            "transcript": transcript,
+            "wake_word_detected": True,
+            "intent": "WAKE_ACTIVATION",
+            "action_taken": "वेक-वर्ड सक्रिय: 'नमस्ते मुनीमजी' पहचाना गया",
+            "audio_response_text": audio_response_text,
+            "audio_base64": b64_audio,
+            "customer_name": None,
+            "amount": 0.0,
+            "due_date": None
+        }
 
     # Sarvam AI LLM Intent & Entity Extraction (Zero brittle hardcoded keywords)
     parsed = backend.parse_voice_with_sarvam_ai(eval_text, db)
@@ -454,6 +482,9 @@ def _direct_process_voice(audio_bytes=None, filename=None, raw_text_input=None, 
         "transcript": transcript,
         "wake_word_detected": wake_word_detected,
         "intent": intent,
+        "customer_name": customer_name,
+        "amount": amount,
+        "due_date": due_date,
         "audio_response_text": audio_response_text,
         "audio_base64": b64_audio,
         "action_taken": action_desc,
@@ -935,333 +966,63 @@ with tab_voice:
     """, unsafe_allow_html=True)
 
     # Embedded Always-On Continuous Web Speech Listener (Bilingual)
-    initial_status = "Ready to listen Hands-Free • Say: 'Hey Munimji'" if is_eng else "तैयार • बोलें: 'हे मुनीमजी' या 'नमस्ते मुनीमजी'"
-    initial_transcript = "🎙️ Click the button above to activate the Soundbox Co-Pilot, then speak hands-free: 'Hey Munimji, record ₹500 for Sharma'..." if is_eng else "🎙️ ऊपर बटन दबाकर साउंडबॉक्स को-पायलट सक्रिय करें, फिर सीधे बोलें: 'हे मुनीमजी, शर्मा जी का ₹500 उधार लिख लो'..."
+    wake_payload = None
+    if munimji_wake_component is not None:
+        try:
+            wake_payload = munimji_wake_component(
+                is_english=is_eng,
+                key="munimji_soundbox_wake",
+                default=None
+            )
+        except Exception as _ex:
+            print(f"Munimji custom component invocation notice: {_ex}")
+            wake_payload = None
 
-    wake_listener_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background: transparent; color: #0f172a; }}
-            .wake-box {{
-                background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-                border: 2px solid #00b9f1;
-                border-radius: 14px;
-                padding: 14px 18px;
-                box-shadow: 0 4px 14px rgba(0, 185, 241, 0.12);
-            }}
-            .wake-status {{
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 12px;
-                font-size: 0.92rem;
-                font-weight: 700;
-                margin-bottom: 10px;
-                flex-wrap: wrap;
-            }}
-            .status-left {{
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }}
-            .pulse-dot {{
-                height: 14px;
-                width: 14px;
-                border-radius: 50%;
-                background-color: #94a3b8;
-                display: inline-block;
-                transition: all 0.3s ease;
-            }}
-            .pulse-dot.active {{
-                background-color: #10b981;
-                box-shadow: 0 0 12px #10b981;
-                animation: pulseGreen 1.5s infinite ease-in-out;
-            }}
-            .pulse-dot.wake-triggered {{
-                background-color: #00b9f1;
-                box-shadow: 0 0 16px #00b9f1;
-                animation: pulseBlue 0.7s infinite ease-in-out;
-            }}
-            @keyframes pulseGreen {{
-                0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
-                70% {{ transform: scale(1.15); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }}
-                100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }}
-            }}
-            @keyframes pulseBlue {{
-                0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 185, 241, 0.8); }}
-                70% {{ transform: scale(1.25); box-shadow: 0 0 0 12px rgba(0, 185, 241, 0); }}
-                100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 185, 241, 0); }}
-            }}
-            .wake-btn {{
-                background: #002e6e;
-                color: #ffffff;
-                border: none;
-                padding: 6px 14px;
-                border-radius: 20px;
-                font-size: 0.82rem;
-                font-weight: 700;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                transition: all 0.2s ease;
-                box-shadow: 0 2px 6px rgba(0,46,110,0.25);
-            }}
-            .wake-btn:hover {{
-                background: #0084c7;
-                transform: translateY(-1px);
-            }}
-            .wake-btn.listening {{
-                background: #dc2626;
-                box-shadow: 0 0 12px rgba(220, 38, 38, 0.5);
-                animation: pulseRed 1.8s infinite ease-in-out;
-            }}
-            @keyframes pulseRed {{
-                0% {{ box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6); }}
-                70% {{ box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }}
-                100% {{ box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }}
-            }}
-            .transcript-box {{
-                background: #ffffff;
-                border: 1px solid #cbd5e1;
-                border-radius: 8px;
-                padding: 10px 14px;
-                font-size: 0.88rem;
-                min-height: 32px;
-                color: #334155;
-                line-height: 1.4;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="wake-box">
-            <div class="wake-status">
-                <div class="status-left">
-                    <span id="dot" class="pulse-dot"></span>
-                    <span id="status_text"><strong>{initial_status}</strong></span>
-                </div>
-                <button id="btn_toggle" class="wake-btn" onclick="toggleWakeListener()">
-                    <span id="btn_icon">🎙️</span> <span id="btn_label">{T("साउंडबॉक्स लिसनर शुरू करें", "Start Soundbox Listener")}</span>
-                </button>
-            </div>
-            <div class="transcript-box" id="transcript_display">
-                {initial_transcript}
-            </div>
-        </div>
+    # Fallback if custom component is unavailable
+    if munimji_wake_component is None:
+        initial_status = "Ready to listen Hands-Free • Say: 'Hey Munimji'" if is_eng else "तैयार • बोलें: 'हे मुनीमजी' या 'नमस्ते मुनीमजी'"
+        initial_transcript = "🎙️ Click the button above to activate the Soundbox Co-Pilot, then speak hands-free: 'Hey Munimji, record ₹500 for Sharma'..." if is_eng else "🎙️ ऊपर बटन दबाकर साउंडबॉक्स को-पायलट सक्रिय करें, फिर सीधे बोलें: 'हे मुनीमजी, शर्मा जी का ₹500 उधार लिख लो'..."
+        wake_fallback_html = f"""
+        <!DOCTYPE html>
+        <html><head><meta charset="utf-8"></head>
+        <body style="font-family:sans-serif;margin:0;padding:12px;background:#f8fafc;border:2px solid #00b9f1;border-radius:12px;">
+            <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">🟢 {initial_status}</div>
+            <div style="color:#64748b;font-size:0.85rem;">{initial_transcript}</div>
+        </body></html>
+        """
+        components.html(wake_fallback_html, height=85)
 
-        <script>
-            var isEnglish = {'true' if is_eng else 'false'};
-            var isListening = false;
-            var isProcessing = false;
-            var wakeDetected = false;
-            var silenceTimer = null;
-            var activeCommandText = "";
-            var recognition = null;
-            var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    # Process spoken command immediately upon receipt from browser WebSocket
+    if wake_payload and isinstance(wake_payload, dict) and wake_payload.get("text"):
+        cmd_text = wake_payload.get("text", "").strip()
+        cmd_ts = wake_payload.get("timestamp")
+        if cmd_text and cmd_ts != st.session_state.get("_last_wake_ts"):
+            st.session_state["_last_wake_ts"] = cmd_ts
+            with st.spinner(T("मुनीमजी हिसाब बही में चढ़ा रहे हैं...", "Munimji updating ledger...")):
+                try:
+                    res = _direct_process_voice(raw_text_input=cmd_text, username=current_user)
+                    if res and not res.get("error"):
+                        st.session_state["real_voice_result"] = res
+                        c_name = res.get("customer_name") or "ग्राहक"
+                        c_amt = res.get("amount") or 0.0
+                        succ_msg = T("✅ बही-खाता अपडेट हो गया!", "✅ Ledger updated successfully!")
+                        if res.get("intent") == "RECORD_UDHAAR":
+                            succ_msg = T(f"✅ {c_name} का ₹{c_amt:,.0f} उधार बही-खाते में दर्ज हो गया! (टैब 2 'खाता बही' देखें)", f"✅ Recorded ₹{c_amt:,.0f} credit for {c_name} in Ledger! (Check Tab 2)")
+                            st.toast(succ_msg, icon="📒")
+                        elif res.get("intent") == "RESTOCK_SUPPLIER":
+                            succ_msg = T("✅ डिस्ट्रीब्यूटर आर्डर दर्ज हुआ और स्टॉक अपडेट हुआ! (टैब 4 देखें)", "✅ Restock order placed & stock updated! (Check Tab 4)")
+                            st.toast(succ_msg, icon="📦")
+                        elif res.get("intent") == "SETTLE_UDHAAR":
+                            succ_msg = T("✅ उधार चुकता हुआ और कैश गल्ले में जुड़ गया! (टैब 2 & 3 देखें)", "✅ Debt settled & cash drawer updated! (Check Tabs 2 & 3)")
+                            st.toast(succ_msg, icon="💰")
+                        st.success(succ_msg)
+                        time.sleep(0.4)
+                        st.rerun()
+                    else:
+                        st.error(res.get("error", "Voice processing failed"))
+                except Exception as e:
+                    st.error(f"Voice processing error: {e}")
 
-            var WAKE_REGEX = /(हे\\s*मुनीम|नमस्ते\\s*मुनीम|सुनो\\s*मुनीम|मुनीम\\s*जी|मुनीमजी|hey\\s*munim|he\\s*munim|ok\\s*munim|namaste\\s*munim|munimji)/i;
-
-            function playChime(freq1, freq2) {{
-                try {{
-                    var AudioCtx = window.AudioContext || window.webkitAudioContext;
-                    if (!AudioCtx) return;
-                    var actx = new AudioCtx();
-                    var osc = actx.createOscillator();
-                    var gain = actx.createGain();
-                    osc.connect(gain);
-                    gain.connect(actx.destination);
-                    osc.frequency.setValueAtTime(freq1 || 587.33, actx.currentTime);
-                    osc.frequency.setValueAtTime(freq2 || 880, actx.currentTime + 0.08);
-                    gain.gain.setValueAtTime(0.25, actx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.35);
-                    osc.start();
-                    osc.stop(actx.currentTime + 0.35);
-                }} catch(e) {{}}
-            }}
-
-            function toggleWakeListener() {{
-                if (isListening) {{
-                    stopListening();
-                }} else {{
-                    startListening();
-                }}
-            }}
-
-            function startListening() {{
-                if (!SpeechRec) {{
-                    alert(isEnglish ? "Web Speech API is not supported in this browser. Please use Google Chrome or Safari." : "यह ब्राउज़र वेब स्पीच सपोर्ट नहीं करता। कृपया गूगल क्रोम या सफारी का उपयोग करें।");
-                    return;
-                }}
-                isListening = true;
-                playChime(523.25, 659.25);
-
-                var btn = document.getElementById('btn_toggle');
-                btn.className = 'wake-btn listening';
-                document.getElementById('btn_icon').innerText = '🔴';
-                document.getElementById('btn_label').innerText = isEnglish ? 'Listening Hands-Free (Click to Pause)' : 'लाइव सुन रहा है (रोकने के लिए दबाएं)';
-
-                document.getElementById('dot').className = 'pulse-dot active';
-                document.getElementById('status_text').innerHTML =
-                    isEnglish ? '🟢 <strong>Active • Say: "Hey Munimji" or "Munimji"</strong>' :
-                                '🟢 <strong>सक्रिय • बोलें: "हे मुनीमजी" या "नमस्ते मुनीमजी"</strong>';
-
-                initRecognition();
-            }}
-
-            function stopListening() {{
-                isListening = false;
-                wakeDetected = false;
-                if (silenceTimer) clearTimeout(silenceTimer);
-                if (recognition) {{
-                    try {{ recognition.abort(); }} catch(e) {{}}
-                }}
-
-                var btn = document.getElementById('btn_toggle');
-                btn.className = 'wake-btn';
-                document.getElementById('btn_icon').innerText = '🎙️';
-                document.getElementById('btn_label').innerText = isEnglish ? 'Start Soundbox Listener' : 'साउंडबॉक्स लिसनर शुरू करें';
-
-                document.getElementById('dot').className = 'pulse-dot';
-                document.getElementById('status_text').innerHTML =
-                    isEnglish ? 'Ready to listen Hands-Free' : 'तैयार • काउंटर पर सुनने के लिए शुरू करें';
-            }}
-
-            function initRecognition() {{
-                if (!SpeechRec) return;
-                try {{
-                    if (recognition) {{
-                        try {{ recognition.abort(); }} catch(e) {{}}
-                    }}
-                    recognition = new SpeechRec();
-                    recognition.continuous = true;
-                    recognition.interimResults = true;
-                    recognition.lang = isEnglish ? 'en-IN' : 'hi-IN';
-
-                    recognition.onresult = function(event) {{
-                        if (isProcessing) return;
-
-                        var fullInterim = '';
-                        for (var i = event.resultIndex; i < event.results.length; i++) {{
-                            fullInterim += event.results[i][0].transcript + ' ';
-                        }}
-                        var text = fullInterim.trim();
-                        if (!text) return;
-
-                        if (!wakeDetected) {{
-                            if (WAKE_REGEX.test(text)) {{
-                                wakeDetected = true;
-                                playChime(659.25, 880);
-
-                                document.getElementById('dot').className = 'pulse-dot wake-triggered';
-                                document.getElementById('status_text').innerHTML =
-                                    '⚡ <strong>' + (isEnglish ? '"Hey Munimji" Active — Listening command...' : '"हे मुनीमजी" सक्रिय — निर्देश सुन रहे हैं...') + '</strong>';
-                                document.getElementById('transcript_display').innerHTML =
-                                    '🗣️ <strong style="color:#0084c7;">' + text + '</strong>';
-
-                                activeCommandText = text;
-
-                                if (silenceTimer) clearTimeout(silenceTimer);
-                                silenceTimer = setTimeout(function() {{
-                                    if (wakeDetected && !isProcessing) {{
-                                        commitCommand();
-                                    }}
-                                }}, 1600);
-                            }}
-                        }} else {{
-                            activeCommandText = text;
-                            document.getElementById('transcript_display').innerHTML =
-                                '🗣️ <strong style="color:#0084c7;">' + activeCommandText + '</strong>';
-
-                            if (silenceTimer) clearTimeout(silenceTimer);
-                            silenceTimer = setTimeout(function() {{
-                                if (wakeDetected && !isProcessing) {{
-                                    commitCommand();
-                                }}
-                            }}, 1500);
-                        }}
-                    }};
-
-                    recognition.onend = function() {{
-                        if (isListening && !isProcessing) {{
-                            setTimeout(function() {{
-                                try {{ recognition.start(); }} catch(e) {{}}
-                            }}, 300);
-                        }}
-                    }};
-
-                    recognition.start();
-                }} catch(err) {{
-                    console.warn('SpeechRecognition init warning:', err);
-                }}
-            }}
-
-            function commitCommand() {{
-                if (isProcessing) return;
-                var cmd = activeCommandText;
-                if (!cmd || cmd.trim().length === 0) return;
-                isProcessing = true;
-                wakeDetected = false;
-                if (silenceTimer) clearTimeout(silenceTimer);
-
-                playChime(880, 1174.66);
-
-                document.getElementById('status_text').innerHTML =
-                    '✅ <strong>' + (isEnglish ? 'Instruction Captured!' : 'निर्देश दर्ज हो गया!') + '</strong>';
-                document.getElementById('transcript_display').innerHTML =
-                    '⚡ <strong style="color:#059669;">' + (isEnglish ? 'Captured: "' : 'पहचाना गया: "') + cmd + '"</strong>';
-
-                // Speak voice confirmation
-                if (window.speechSynthesis) {{
-                    try {{
-                        var utt = new SpeechSynthesisUtterance(isEnglish ? "Instruction recorded" : "नमस्ते, आपका निर्देश सुन लिया गया है");
-                        utt.lang = isEnglish ? 'en-IN' : 'hi-IN';
-                        window.speechSynthesis.speak(utt);
-                    }} catch(e) {{}}
-                }}
-
-                // Safely insert into typed instruction box in parent document if accessible
-                try {{
-                    var doc = window.parent.document;
-                    var inputs = doc.querySelectorAll('input[type="text"]');
-                    for (var k = 0; k < inputs.length; k++) {{
-                        if (inputs[k].placeholder && (inputs[k].placeholder.includes('मुनीम') || inputs[k].placeholder.includes('Munim'))) {{
-                            inputs[k].value = cmd;
-                            inputs[k].dispatchEvent(new Event('input', {{ bubbles: true }}));
-                            inputs[k].dispatchEvent(new Event('change', {{ bubbles: true }}));
-                            break;
-                        }}
-                    }}
-                }} catch(err) {{
-                    console.warn('Parent DOM populate:', err);
-                }}
-
-                setTimeout(function() {{
-                    isProcessing = false;
-                    wakeDetected = false;
-                    document.getElementById('status_text').innerHTML =
-                        isEnglish ? '🟢 <strong>Listening Hands-Free • Say: "Hey Munimji"</strong>' :
-                                    '🟢 <strong>सक्रिय • बोलें: "हे मुनीमजी" या कोई भी निर्देश</strong>';
-                }}, 3000);
-            }}
-
-            // Attempt auto-activation if user already granted permission
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {{
-                navigator.mediaDevices.getUserMedia({{ audio: true }})
-                .then(function(stream) {{
-                    startListening();
-                }})
-                .catch(function(err) {{
-                    // Needs user click gesture to grant permission
-                }});
-            }}
-        </script>
-    </body>
-    </html>
-    """
-    components.html(wake_listener_html, height=155)
 
     v1, v2 = st.columns([1.1, 1.2])
     with v1:
@@ -1379,7 +1140,7 @@ with tab_voice:
             b64_audio = res.get("audio_base64")
             if b64_audio:
                 audio_bytes = base64.b64decode(b64_audio)
-                st.audio(audio_bytes, format="audio/mp3")
+                st.audio(audio_bytes, format="audio/mp3", autoplay=True)
 
             if res.get("action_taken"):
                 st.caption(f"⚙️ **{T('दर्ज कार्यवाही:', 'Action Logged:')}** {res.get('action_taken')}")

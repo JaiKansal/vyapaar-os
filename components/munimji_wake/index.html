@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 4px;
+            background: transparent;
+            color: #0f172a;
+            box-sizing: border-box;
+        }
+        .wake-box {
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 2px solid #00b9f1;
+            border-radius: 14px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 14px rgba(0, 185, 241, 0.12);
+            box-sizing: border-box;
+        }
+        .wake-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.92rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .status-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pulse-dot {
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: #94a3b8;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+        .pulse-dot.active {
+            background: #10b981;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            animation: pulse-green 1.4s infinite;
+        }
+        .pulse-dot.wake-triggered {
+            background: #00b9f1;
+            box-shadow: 0 0 0 0 rgba(0, 185, 241, 0.8);
+            animation: pulse-blue 0.8s infinite;
+        }
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1.15); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        @keyframes pulse-blue {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 185, 241, 0.8); }
+            70% { transform: scale(1.25); box-shadow: 0 0 0 12px rgba(0, 185, 241, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 185, 241, 0); }
+        }
+        .wake-btn {
+            background: #002e6e;
+            color: #ffffff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .wake-btn:hover {
+            background: #001f4d;
+            transform: translateY(-1px);
+        }
+        .wake-btn.listening {
+            background: #ef4444;
+            animation: pulse-btn 1.8s infinite;
+        }
+        @keyframes pulse-btn {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+            70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .transcript-box {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            color: #475569;
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="wake-box" id="wake_container">
+        <div class="wake-status">
+            <div class="status-left">
+                <span id="dot" class="pulse-dot"></span>
+                <span id="status_text"><strong>तैयार • बोलें: 'हे मुनीमजी' या 'नमस्ते मुनीमजी'</strong></span>
+            </div>
+            <button id="btn_toggle" class="wake-btn" onclick="toggleWakeListener()">
+                <span id="btn_icon">🎙️</span> <span id="btn_label">साउंडबॉक्स लिसनर शुरू करें</span>
+            </button>
+        </div>
+        <div class="transcript-box" id="transcript_display">
+            🎙️ ऊपर बटन दबाकर साउंडबॉक्स को-पायलट सक्रिय करें, फिर सीधे बोलें: 'हे मुनीमजी, शर्मा जी का ₹500 उधार लिख लो'...
+        </div>
+    </div>
+
+    <script>
+        var isEnglish = false;
+        var isListening = false;
+        var isProcessing = false;
+        var wakeDetected = false;
+        var silenceTimer = null;
+        var activeCommandText = "";
+        var recognition = null;
+        var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        var WAKE_REGEX = /(हे\s*मुनीम|नमस्ते\s*मुनीम|सुनो\s*मुनीम|मुनीम\s*जी|मुनीमजी|hey\s*munim|he\s*munim|ok\s*munim|namaste\s*munim|munimji)/i;
+
+        // Streamlit Component Protocol
+        function sendToStreamlit(type, data) {
+            var msg = Object.assign({ isStreamlitMessage: true, type: type }, data || {});
+            window.parent.postMessage(msg, "*");
+        }
+
+        function setFrameHeight() {
+            var el = document.getElementById('wake_container');
+            var h = el ? el.offsetHeight + 18 : 155;
+            sendToStreamlit("streamlit:setFrameHeight", { height: h });
+        }
+
+        function setComponentValue(val) {
+            sendToStreamlit("streamlit:setComponentValue", { value: val });
+        }
+
+        // Notify Streamlit that component is ready
+        sendToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+
+        // Listen for Streamlit render events
+        window.addEventListener("message", function(event) {
+            if (event.data && event.data.type === "streamlit:render") {
+                var args = event.data.args || {};
+                if (args.is_english !== undefined) {
+                    var prevLang = isEnglish;
+                    isEnglish = Boolean(args.is_english);
+                    if (prevLang !== isEnglish) {
+                        updateLanguageLabels();
+                    }
+                }
+                setFrameHeight();
+            }
+        });
+
+        function updateLanguageLabels() {
+            var dot = document.getElementById('dot');
+            var btnLabel = document.getElementById('btn_label');
+            var statusText = document.getElementById('status_text');
+            var transcriptDisplay = document.getElementById('transcript_display');
+
+            if (isListening) {
+                btnLabel.innerText = isEnglish ? 'Listening Hands-Free (Click to Pause)' : 'लाइव सुन रहा है (रोकने के लिए दबाएं)';
+                if (!wakeDetected && !isProcessing) {
+                    statusText.innerHTML = isEnglish ? '🟢 <strong>Active • Say: "Hey Munimji" or "Munimji"</strong>' :
+                                                       '🟢 <strong>सक्रिय • बोलें: "हे मुनीमजी" या "नमस्ते मुनीमजी"</strong>';
+                }
+            } else {
+                btnLabel.innerText = isEnglish ? 'Start Soundbox Listener' : 'साउंडबॉक्स लिसनर शुरू करें';
+                if (!isProcessing) {
+                    statusText.innerHTML = isEnglish ? 'Ready to listen Hands-Free' : 'तैयार • काउंटर पर सुनने के लिए शुरू करें';
+                    transcriptDisplay.innerHTML = isEnglish ?
+                        '🎙️ Click the button above to activate the Soundbox Co-Pilot, then speak hands-free: "Hey Munimji, record ₹500 for Sharma"...' :
+                        '🎙️ ऊपर बटन दबाकर साउंडबॉक्स को-पायलट सक्रिय करें, फिर सीधे बोलें: "हे मुनीमजी, शर्मा जी का ₹500 उधार लिख लो"...';
+                }
+            }
+        }
+
+        function playChime(freq1, freq2) {
+            try {
+                var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                var actx = new AudioCtx();
+                var osc = actx.createOscillator();
+                var gain = actx.createGain();
+                osc.connect(gain);
+                gain.connect(actx.destination);
+                osc.frequency.setValueAtTime(freq1 || 587.33, actx.currentTime);
+                osc.frequency.setValueAtTime(freq2 || 880, actx.currentTime + 0.08);
+                gain.gain.setValueAtTime(0.25, actx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.35);
+                osc.start();
+                osc.stop(actx.currentTime + 0.35);
+            } catch(e) {}
+        }
+
+        function toggleWakeListener() {
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            if (!SpeechRec) {
+                alert(isEnglish ? "Web Speech API is not supported in this browser. Please use Google Chrome or Safari." : "यह ब्राउज़र वेब स्पीच सपोर्ट नहीं करता। कृपया गूगल क्रोम या सफारी का उपयोग करें।");
+                return;
+            }
+            isListening = true;
+            playChime(523.25, 659.25);
+
+            var btn = document.getElementById('btn_toggle');
+            btn.className = 'wake-btn listening';
+            document.getElementById('btn_icon').innerText = '🔴';
+            document.getElementById('btn_label').innerText = isEnglish ? 'Listening Hands-Free (Click to Pause)' : 'लाइव सुन रहा है (रोकने के लिए दबाएं)';
+
+            document.getElementById('dot').className = 'pulse-dot active';
+            document.getElementById('status_text').innerHTML =
+                isEnglish ? '🟢 <strong>Active • Say: "Hey Munimji" or "Munimji"</strong>' :
+                            '🟢 <strong>सक्रिय • बोलें: "हे मुनीमजी" या "नमस्ते मुनीमजी"</strong>';
+
+            initRecognition();
+        }
+
+        function stopListening() {
+            isListening = false;
+            wakeDetected = false;
+            if (silenceTimer) clearTimeout(silenceTimer);
+            if (recognition) {
+                try { recognition.abort(); } catch(e) {}
+            }
+
+            var btn = document.getElementById('btn_toggle');
+            btn.className = 'wake-btn';
+            document.getElementById('btn_icon').innerText = '🎙️';
+            document.getElementById('btn_label').innerText = isEnglish ? 'Start Soundbox Listener' : 'साउंडबॉक्स लिसनर शुरू करें';
+
+            document.getElementById('dot').className = 'pulse-dot';
+            document.getElementById('status_text').innerHTML =
+                isEnglish ? 'Ready to listen Hands-Free' : 'तैयार • काउंटर पर सुनने के लिए शुरू करें';
+        }
+
+        function initRecognition() {
+            if (!SpeechRec) return;
+            try {
+                if (recognition) {
+                    try { recognition.abort(); } catch(e) {}
+                }
+                recognition = new SpeechRec();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = isEnglish ? 'en-IN' : 'hi-IN';
+
+                recognition.onresult = function(event) {
+                    if (isProcessing) return;
+
+                    var fullInterim = '';
+                    for (var i = event.resultIndex; i < event.results.length; i++) {
+                        fullInterim += event.results[i][0].transcript + ' ';
+                    }
+                    var text = fullInterim.trim();
+                    if (!text) return;
+
+                    if (!wakeDetected) {
+                        if (WAKE_REGEX.test(text)) {
+                            wakeDetected = true;
+                            playChime(659.25, 880);
+
+                            document.getElementById('dot').className = 'pulse-dot wake-triggered';
+                            document.getElementById('status_text').innerHTML =
+                                '⚡ <strong>' + (isEnglish ? '"Hey Munimji" Active — Listening command...' : '"हे मुनीमजी" सक्रिय — निर्देश सुन रहे हैं...') + '</strong>';
+                            document.getElementById('transcript_display').innerHTML =
+                                '🗣️ <strong style="color:#0084c7;">' + text + '</strong>';
+
+                            activeCommandText = text;
+
+                            if (silenceTimer) clearTimeout(silenceTimer);
+                            silenceTimer = setTimeout(function() {
+                                if (wakeDetected && !isProcessing) {
+                                    commitCommand();
+                                }
+                            }, 1600);
+                        }
+                    } else {
+                        activeCommandText = text;
+                        document.getElementById('transcript_display').innerHTML =
+                            '🗣️ <strong style="color:#0084c7;">' + activeCommandText + '</strong>';
+
+                        if (silenceTimer) clearTimeout(silenceTimer);
+                        silenceTimer = setTimeout(function() {
+                            if (wakeDetected && !isProcessing) {
+                                commitCommand();
+                            }
+                        }, 1500);
+                    }
+                };
+
+                recognition.onend = function() {
+                    if (isListening && !isProcessing) {
+                        setTimeout(function() {
+                            try { recognition.start(); } catch(e) {}
+                        }, 300);
+                    }
+                };
+
+                recognition.start();
+            } catch(err) {
+                console.warn('SpeechRecognition init warning:', err);
+            }
+        }
+
+        function commitCommand() {
+            if (isProcessing) return;
+            var cmd = activeCommandText;
+            if (!cmd || cmd.trim().length === 0) return;
+            isProcessing = true;
+            wakeDetected = false;
+            if (silenceTimer) clearTimeout(silenceTimer);
+
+            playChime(880, 1174.66);
+
+            document.getElementById('status_text').innerHTML =
+                '⏳ <strong>' + (isEnglish ? 'Recording to Ledger with Sarvam AI...' : 'Sarvam AI द्वारा बही-खाते में दर्ज हो रहा है...') + '</strong>';
+            document.getElementById('transcript_display').innerHTML =
+                '⚡ <strong style="color:#059669;">' + (isEnglish ? 'Captured: "' : 'पहचाना गया: "') + cmd + '"</strong>';
+
+            // Immediate pleasant voice confirmation
+            if (window.speechSynthesis) {
+                try {
+                    var utt = new SpeechSynthesisUtterance(isEnglish ? "Instruction received. Updating ledger." : "नमस्ते, आपका निर्देश सुन लिया गया है। बही-खाता अपडेट हो रहा है।");
+                    utt.lang = isEnglish ? 'en-IN' : 'hi-IN';
+                    window.speechSynthesis.speak(utt);
+                } catch(e) {}
+            }
+
+            // Transmit command to Streamlit Python over WebSocket to mutate real ledger & tabs
+            setComponentValue({
+                text: cmd,
+                timestamp: Date.now()
+            });
+
+            setTimeout(function() {
+                isProcessing = false;
+                wakeDetected = false;
+                document.getElementById('status_text').innerHTML =
+                    isEnglish ? '🟢 <strong>Listening Hands-Free • Say: "Hey Munimji"</strong>' :
+                                '🟢 <strong>सक्रिय • बोलें: "हे मुनीमजी" या कोई भी निर्देश</strong>';
+            }, 3500);
+        }
+
+        // Auto-activate hands-free listening if user already granted permission
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(function(stream) {
+                startListening();
+            })
+            .catch(function(err) {
+                // Wait for user gesture on button
+            });
+        }
+
+        // Trigger initial height notification
+        setTimeout(setFrameHeight, 150);
+        window.addEventListener('resize', setFrameHeight);
+    </script>
+</body>
+</html>
