@@ -277,9 +277,11 @@ def _direct_process_slip(file_bytes=None, filename=None, raw_text_input=None, us
         desc = "सीधे विवरण से निकाला गया हिसाब"
 
     if not raw_text:
-        raw_text = SAMPLE_KACHA_BILLS[0]["raw_text"]
-        title = SAMPLE_KACHA_BILLS[0]["title"]
-        desc = SAMPLE_KACHA_BILLS[0]["description"]
+        return {
+            "error": "सरवम एआई इस फोटो से हिसाब नहीं पढ़ सका। कृपया पर्ची की साफ और स्पष्ट फोटो अपलोड करें या नीचे दिए गए बॉक्स में पाठ दर्ज करें।",
+            "parsed_entities": {"new_udhaars": []},
+            "raw_text": ""
+        }
 
     new_udhaars = backend.parse_kacha_slip_text(raw_text)
     for item in new_udhaars:
@@ -1577,20 +1579,31 @@ with tab_parchi:
                     try:
                         files = {'file': (active_image_filename or 'slip.jpg', active_image_bytes, 'image/jpeg')}
                         try:
-                            r = requests.post(f"{BACKEND_URL}/api/process-slip", data={"username": st.session_state.get("username", "ramesh")}, files=files, timeout=35)
+                            r = requests.post(f"{BACKEND_URL}/api/process-slip", data={"username": st.session_state.get("username", "ramesh")}, files=files, timeout=65)
                             if r.status_code == 200:
                                 res_json = r.json()
                             else:
-                                res_json = _direct_process_slip(active_image_bytes, active_image_filename, username=st.session_state.get("username", "ramesh"))
+                                err_msg = ""
+                                try:
+                                    err_msg = r.json().get("error", "")
+                                except Exception:
+                                    pass
+                                if err_msg:
+                                    res_json = {"error": err_msg}
+                                else:
+                                    res_json = _direct_process_slip(active_image_bytes, active_image_filename, username=st.session_state.get("username", "ramesh"))
                         except Exception:
                             # In-process fallback directly calls Sarvam Vision 1.5
                             res_json = _direct_process_slip(active_image_bytes, active_image_filename, username=st.session_state.get("username", "ramesh"))
 
-                        st.session_state['slip_result'] = res_json
-                        st.session_state['extracted_raw_text'] = res_json.get('raw_text', '')
-                        st.success(T('✅ पर्ची का हिसाब सीधे बही-खाते में दर्ज हो गया!', '✅ Slip debts directly ingested into live ledger!'))
-                        time.sleep(0.5)
-                        st.rerun()
+                        if res_json.get("error"):
+                            st.error(res_json.get("error"))
+                        else:
+                            st.session_state['slip_result'] = res_json
+                            st.session_state['extracted_raw_text'] = res_json.get('raw_text', '')
+                            st.success(T('✅ पर्ची का हिसाब सीधे बही-खाते में दर्ज हो गया!', '✅ Slip debts directly ingested into live ledger!'))
+                            time.sleep(0.5)
+                            st.rerun()
                     except Exception as ex:
                         st.error(f"Processing error: {ex}")
             else:

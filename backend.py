@@ -829,17 +829,33 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
         return ""
 
     try:
+        from PIL import Image
+        # Optimize / compress image if > 400KB to ensure instant upload without connection write timeout
+        upload_bytes = image_bytes
+        if len(image_bytes) > 350 * 1024:
+            try:
+                img = Image.open(io.BytesIO(image_bytes))
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.thumbnail((1200, 1200))
+                out_buf = io.BytesIO()
+                img.save(out_buf, format="JPEG", quality=82)
+                upload_bytes = out_buf.getvalue()
+                logger.info(f"Optimized slip image from {len(image_bytes)} to {len(upload_bytes)} bytes")
+            except Exception as e:
+                logger.warning(f"Image resize exception: {e}")
+
         headers = {"api-subscription-key": SARVAM_API_KEY}
-        files = {"file": (filename, image_bytes, "image/jpeg")}
+        files = {"file": (filename or "slip.jpg", upload_bytes, "image/jpeg")}
         data = {"output_format": "md"}
 
-        # 1. Start digitisation job
+        # 1. Start digitisation job with 60s timeout
         resp = requests.post(
             "https://api.sarvam.ai/doc-ai/v1/job/digitise",
             headers=headers,
             files=files,
             data=data,
-            timeout=25
+            timeout=60
         )
         if resp.status_code not in [200, 201]:
             logger.error(f"Sarvam doc-ai digitise start failed ({resp.status_code}): {resp.text}")
@@ -850,11 +866,11 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
             logger.error("No job_id returned by Sarvam Document AI")
             return ""
 
-        # 2. Poll for completion
+        # 2. Poll for completion up to 35 iterations (~50s)
         status = "pending"
-        for _ in range(15):
-            time.sleep(1)
-            st_res = requests.get(f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/status", headers=headers, timeout=10)
+        for _ in range(35):
+            time.sleep(1.5)
+            st_res = requests.get(f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/status", headers=headers, timeout=15)
             if st_res.status_code == 200:
                 status = st_res.json().get("status")
                 if status in ["completed", "failed", "rejected"]:
@@ -865,7 +881,7 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
             return ""
 
         # 3. Retrieve results
-        res = requests.get(f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/results", headers=headers, timeout=10)
+        res = requests.get(f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/results", headers=headers, timeout=15)
         if res.status_code != 200:
             logger.error(f"Failed to fetch Sarvam Document AI results: {res.text}")
             return ""
@@ -928,70 +944,69 @@ def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
             continue
 
         # Strip leading numbering like '1.', '1)', '1 -', '#1', '1:'
-        cleaned = re.sub(r'^(?:#?\d+[\.\)\-:]\s*)+', '', line).strip()
-        if not cleaned:
+        cleaned = re.sub(r'^(?:\d+[\.\)\:\-]\s*|\#\d+\s*)', '', line).strip()
+        if not cleaned or len(cleaned) < 2:
             continue
 
-        amt = None
-        c_name = ''
-        items = ''
+        # Extract amount from the line (e.g. ₹850, 850/-, Rs 850, = 850)
+        amount_match = re.findall(r'(?:₹|rs\.?|inr|=)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+)\s*(?:/-|रु|रुपये)?', cleaned, re.IGNORECASE)
+        amount = 0.0
+        if amount_match:
+            try:
+                # Take the last matched number which is typically the line item total
+                val_str = amount_match[-1].replace(',', '')
+                amount = float(val_str)
+            except ValueError:
+                amount = 0.0
 
-        # Pattern 1: Line contains '=' (total amount is after '=', customer & items are before '=')
-        # e.g.: "सुरेश शर्मा - 2 पैकेट फॉर्च्यून तेल + 5kg बासमती = ₹850"
-        if '=' in cleaned:
-            left_part, right_part = cleaned.split('=', 1)
-            # Find the final total amount in right_part
-            m_amt = re.search(r'(\d[\d,]*(?:\.\d+)?)', right_part)
-            if m_amt:
-                amt = float(m_amt.group(1).replace(',', ''))
+        # Extract customer name vs item description
+        # Formats: "सुरेश शर्मा - 2 पैकेट तेल = ₹850" or "सुरेश शर्मा : 2 तेल = 850" or "Pooja Verma - 10kg Atta"
+        name = "ग्राहक"
+        items = "किराना सामान"
 
-            left_part = left_part.strip()
-            # Split customer name and items by '-' or ':'
-            if '-' in left_part:
-                parts = left_part.split('-', 1)
-                c_name = parts[0].strip()
-                items = parts[1].strip()
-            elif ':' in left_part:
-                parts = left_part.split(':', 1)
-                c_name = parts[0].strip()
-                items = parts[1].strip()
+        if '-' in cleaned:
+            parts = cleaned.split('-', 1)
+            name = parts[0].strip()
+            items_part = parts[1].strip()
+            # Clean items part by removing amount expression
+            items = re.sub(r'(?:₹|rs\.?|inr|=)?\s*[0-9,]+(?:\.[0-9]{2})?\s*(?:/-|रु|रुपये|\(उधार\)|\(udhaar\))?', '', items_part, flags=re.IGNORECASE).strip()
+        elif ':' in cleaned:
+            parts = cleaned.split(':', 1)
+            name = parts[0].strip()
+            items_part = parts[1].strip()
+            items = re.sub(r'(?:₹|rs\.?|inr|=)?\s*[0-9,]+(?:\.[0-9]{2})?\s*(?:/-|रु|रुपये|\(उधार\)|\(udhaar\))?', '', items_part, flags=re.IGNORECASE).strip()
+        elif '=' in cleaned:
+            parts = cleaned.split('=', 1)
+            name_and_item = parts[0].strip()
+            name_parts = name_and_item.split(' ')
+            if len(name_parts) >= 2:
+                name = " ".join(name_parts[:2])
+                items = " ".join(name_parts[2:]) if len(name_parts) > 2 else "किराना सामान"
             else:
-                c_name = left_part
-                items = 'किराना सामान'
+                name = name_and_item
         else:
-            # Pattern 2: No '=' (e.g. 'रमेश जी: 500' or 'सुरेश शर्मा - ₹850')
-            # Look for trailing amount, optionally preceded by : or - or ₹/Rs and followed by udhaar
-            m_amt = re.search(r'[:\-]?\s*(?:₹|Rs\.?|INR)?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:रुपये|रु|₹|rs|/-)?\s*(?:\([^\)]*\)|उधार|udhaar)?\s*$', cleaned, re.IGNORECASE)
-            if m_amt:
-                amt = float(m_amt.group(1).replace(',', ''))
-                prefix = cleaned[:m_amt.start()].strip()
-                if '-' in prefix:
-                    parts = prefix.split('-', 1)
-                    c_name = parts[0].strip()
-                    items = parts[1].strip()
-                elif ':' in prefix:
-                    parts = prefix.split(':', 1)
-                    c_name = parts[0].strip()
-                    items = parts[1].strip()
-                else:
-                    c_name = prefix
-                    items = 'किराना सामान'
+            words = cleaned.split()
+            if len(words) >= 2:
+                name = f"{words[0]} {words[1]}"
+                items = " ".join(words[2:]) if len(words) > 2 else "किराना सामान"
 
-        # Cleanup customer name and items
-        c_name = re.sub(r'^[^\w\s\u0900-\u097F]+|[^\w\s\u0900-\u097F]+$', '', c_name).strip()
-        items = re.sub(r'^[^\w\s\u0900-\u097F]+|[^\w\s\u0900-\u097F]+$', '', items).strip()
+        # Final cleanup on extracted names and items
+        name = re.sub(r'[\(\[\{].*?[\)\]\}]', '', name).strip()
         if not items:
-            items = 'किराना सामान'
+            items = "किराना सामान"
 
         # Filter out false positives for customer name
-        c_low = c_name.lower()
+        c_low = name.lower()
         if any(w in c_low for w in ['दिनांक', 'date', 'तारीख', 'total', 'टोटल', 'कुल', 'bill', 'slip', 'kacha', 'पर्चा', 'खाता', 'नया उधार']):
             continue
 
-        if amt is not None and amt > 0 and len(c_name) >= 2:
-            entry = {'customer': c_name, 'amount': amt, 'items': items}
-            if slip_date:
-                entry['due_date'] = slip_date
+        if amount > 0 and len(name) >= 2:
+            entry = {
+                "customer": name or "अज्ञात ग्राहक",
+                "items": items,
+                "amount": amount,
+                "due_date": slip_date
+            }
             results.append(entry)
 
     return results
@@ -1020,22 +1035,38 @@ async def process_slip(
                     raw_text = extracted_ocr
                     title = f"पर्ची: {file.filename}"
                     desc = "सरवम एआई (Sarvam Document Intelligence) द्वारा फोटो से सीधे निकाला गया हिसाब"
+                else:
+                    return JSONResponse(
+                        status_code=422,
+                        content={
+                            "error": "सरवम एआई इस फोटो से हिसाब नहीं पढ़ सका। कृपया पर्ची की साफ और स्पष्ट फोटो अपलोड करें या नीचे दिए गए बॉक्स में पाठ दर्ज करें।"
+                        }
+                    )
         except Exception as e:
             logger.error(f"Error processing uploaded slip file: {e}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Sarvam AI slip processing exception: {e}"}
+            )
 
-    # 2. Fallback: If no file or OCR empty, check raw_text_input
+    # 2. Fallback: If no file, check raw_text_input
     if not raw_text and raw_text_input and len(raw_text_input.strip()) > 3:
         raw_text = raw_text_input.strip()
         desc = "सीधे विवरण से निकाला गया हिसाब"
 
-    # 3. Fallback: Sample bills if neither is provided
-    if not raw_text:
+    # 3. Presets: Only if slip_id explicitly provided (for quick preset testing)
+    if not raw_text and slip_id:
         selected_bill = next((b for b in SAMPLE_KACHA_BILLS if b["id"] == slip_id), None)
-        if not selected_bill:
-            selected_bill = SAMPLE_KACHA_BILLS[0]
-        raw_text = selected_bill["raw_text"]
-        title = selected_bill["title"]
-        desc = selected_bill["description"]
+        if selected_bill:
+            raw_text = selected_bill["raw_text"]
+            title = selected_bill["title"]
+            desc = selected_bill["description"]
+
+    if not raw_text:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "कृपया पर्ची की फोटो अपलोड करें या पर्ची का विवरण दर्ज करें।"}
+        )
 
     # Parse kacha slip text into structured debts
     new_udhaars = parse_kacha_slip_text(raw_text)
