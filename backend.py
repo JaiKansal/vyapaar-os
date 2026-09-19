@@ -76,14 +76,31 @@ if COGNEE_API_KEY:
     os.environ["COGNEE_API_KEY"] = COGNEE_API_KEY
 
 
+def _get_sarvam_key() -> str:
+    """Always re-read Sarvam API key dynamically — safe for Streamlit Cloud threads."""
+    # 1. Try Streamlit secrets first (Streamlit Cloud deployment)
+    try:
+        import streamlit as _st
+        if hasattr(_st, "secrets") and "SARVAM_API_KEY" in _st.secrets:
+            key = _st.secrets["SARVAM_API_KEY"]
+            if key:
+                os.environ["SARVAM_API_KEY"] = key  # propagate for sub-calls
+                return key
+    except Exception:
+        pass
+    # 2. Fall back to environment variable (local .env or system)
+    return os.environ.get("SARVAM_API_KEY", "")
+
+
 def call_sarvam_llm(user_prompt: str, system_prompt: Optional[str] = None, model: Optional[str] = None) -> Optional[str]:
     """Execute LLM chat completion using Sarvam AI's flagship Indic model (sarvam-105b / sarvam-105b-conversations)."""
-    if not SARVAM_API_KEY:
+    api_key = _get_sarvam_key()
+    if not api_key:
         return None
     try:
         headers = {
-            "Authorization": f"Bearer {SARVAM_API_KEY}",
-            "api-subscription-key": SARVAM_API_KEY,
+            "Authorization": f"Bearer {api_key}",
+            "api-subscription-key": api_key,
             "Content-Type": "application/json"
         }
         messages = []
@@ -128,10 +145,11 @@ def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "voice.wav") -> s
     2. Otherwise uses Google Speech Recognition in Hindi (hi-IN) and Hinglish/English (en-IN).
     """
     global SARVAM_API_KEY
-    if SARVAM_API_KEY:
+    api_key = _get_sarvam_key()
+    if api_key:
         try:
             url = "https://api.sarvam.ai/speech-to-text"
-            headers = {"api-subscription-key": SARVAM_API_KEY}
+            headers = {"api-subscription-key": api_key}
             payload = {
                 "model": "saaras:v3",
                 "language_code": "hi-IN",
@@ -183,11 +201,12 @@ def synthesize_spoken_hindi(text: str) -> str:
     Returns base64 encoded MP3 audio string for browser playback.
     """
     global SARVAM_API_KEY
-    if SARVAM_API_KEY:
+    api_key = _get_sarvam_key()
+    if api_key:
         try:
             url = "https://api.sarvam.ai/text-to-speech"
             headers = {
-                "api-subscription-key": SARVAM_API_KEY,
+                "api-subscription-key": api_key,
                 "Content-Type": "application/json"
             }
             # manan = natural Indian male voice, ideal for a shop Soundbox
@@ -824,7 +843,8 @@ def sarvam_chat(
 
 def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -> str:
     """Uses Sarvam AI Document Intelligence API (Sarvam Vision 1.5) to directly OCR handwritten slips."""
-    if not SARVAM_API_KEY:
+    api_key = _get_sarvam_key()  # Always resolve fresh — never use stale module-level constant
+    if not api_key:
         logger.warning("SARVAM_API_KEY not configured for document digitisation.")
         return ""
 
@@ -845,7 +865,7 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
             except Exception as e:
                 logger.warning(f"Image resize exception: {e}")
 
-        headers = {"api-subscription-key": SARVAM_API_KEY}
+        headers = {"api-subscription-key": api_key}
         files = {"file": (filename or "slip.jpg", upload_bytes, "image/jpeg")}
         data = {"output_format": "md"}
 
