@@ -6,7 +6,7 @@
       "sku": "SKU-AMUL-01",
       "name": "Amul Taaza Milk (500ml)",
       "category": "Dairy",
-      "current_stock": 4,
+      "current_stock": 24,
       "min_threshold": 25,
       "unit": "packets",
       "cost_price": 27.0,
@@ -95,6 +95,93 @@
       "status": "PENDING"
     }
   ],
-  "cash_in_hand": 18500.0,
-  "daily_sales_avg": 9200.0
+  "cash_in_hand": 19350.0,
+  "daily_sales_avg": 9200.0,
+  "customers_udhaar": [
+    {
+      "id": "UDH-101",
+      "customer_name": "सुरेश शर्मा",
+      "phone": "+91 98765 43210",
+      "amount": 2450.0,
+      "days_overdue": 14,
+      "items": "2x बासमती चावल 5kg, रिफाइंड तेल 2L",
+      "status": "OVERDUE",
+      "last_reminded": "3 दिन पहले",
+      "due_date": "20-Sep-2026",
+      "created_at": "2026-09-19 09:00"
+    },
+    {
+      "id": "UDH-102",
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98111 22334",
+      "amount": 1120.0,
+      "days_overdue": 6,
+      "items": "आटा 10kg, चाय पत्ती 500g, चीनी 2kg",
+      "status": "PENDING",
+      "last_reminded": "कभी नहीं",
+      "due_date": "22-Sep-2026",
+      "created_at": "2026-09-19 09:00"
+    },
+    {
+      "id": "UDH-103",
+      "customer_name": "अनिल कुमार (ढाबा)",
+      "phone": "+91 99223 88441",
+      "amount": 4800.0,
+      "days_overdue": 21,
+      "items": "दाल 20kg, चावल 30kg, सरसों तेल",
+      "status": "CRITICAL",
+      "last_reminded": "7 दिन पहले",
+      "due_date": "18-Sep-2026",
+      "created_at": "2026-09-19 09:00"
+    }
+  ],
+  "action_logs": [
+    {
+      "id": "ACT-103",
+      "timestamp": "03:01 PM, 19 Sep",
+      "action_type": "UDHAAR_SETTLED",
+      "description": "Settled udhaar for शर्मा जी (+₹850)",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "udhaar_id": "UDH-104",
+        "customer": "शर्मा जी",
+        "amount": 850.0
+      }
+    },
+    {
+      "id": "ACT-102",
+      "timestamp": "03:01 PM, 19 Sep",
+      "action_type": "DISTRIBUTOR_RESTOCK_CALL",
+      "description": "Restock order placed for 20x Amul Taaza Milk (500ml) and inventory updated",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "Deterministic Engine (Local Guardrail Verified)",
+      "payload": {
+        "item": "Amul Taaza Milk (500ml)",
+        "quantity": 20,
+        "supplier": "Goyal Dairy Distributors",
+        "sku": "SKU-AMUL-01"
+      }
+    },
+    {
+      "id": "ACT-101",
+      "timestamp": "03:01 PM, 19 Sep",
+      "action_type": "RECORD_UDHAAR",
+      "description": "Spoken udhaar recorded: शर्मा जी owes ₹850.00, due: unspecified",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "Deterministic Engine (Local Guardrail Verified)",
+      "payload": {
+        "id": "UDH-104",
+        "customer_name": "शर्मा जी",
+        "phone": "+91 98765 00000",
+        "amount": 850.0,
+        "days_overdue": 0,
+        "items": "आवाज़ से दर्ज किराना उधार",
+        "status": "ACTIVE",
+        "last_reminded": "Just added",
+        "due_date": "Not specified",
+        "created_at": "2026-09-19 15:01"
+      }
+    }
+  ]
 }

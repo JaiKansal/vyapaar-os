@@ -19,7 +19,44 @@ DEFAULT_STATE = {
     "location": "Laxmi Nagar, Delhi NCR",
     "cash_in_hand": 18500.0,
     "daily_sales_avg": 9200.0,
-    "customers_udhaar": [],
+    "customers_udhaar": [
+        {
+            "id": "UDH-101",
+            "customer_name": "सुरेश शर्मा",
+            "phone": "+91 98765 43210",
+            "amount": 2450.0,
+            "days_overdue": 14,
+            "items": "2x बासमती चावल 5kg, रिफाइंड तेल 2L",
+            "status": "OVERDUE",
+            "last_reminded": "3 दिन पहले",
+            "due_date": "20-Sep-2026",
+            "created_at": "2026-09-19 09:00"
+        },
+        {
+            "id": "UDH-102",
+            "customer_name": "पूजा वर्मा",
+            "phone": "+91 98111 22334",
+            "amount": 1120.0,
+            "days_overdue": 6,
+            "items": "आटा 10kg, चाय पत्ती 500g, चीनी 2kg",
+            "status": "PENDING",
+            "last_reminded": "कभी नहीं",
+            "due_date": "22-Sep-2026",
+            "created_at": "2026-09-19 09:00"
+        },
+        {
+            "id": "UDH-103",
+            "customer_name": "अनिल कुमार (ढाबा)",
+            "phone": "+91 99223 88441",
+            "amount": 4800.0,
+            "days_overdue": 21,
+            "items": "दाल 20kg, चावल 30kg, सरसों तेल",
+            "status": "CRITICAL",
+            "last_reminded": "7 दिन पहले",
+            "due_date": "18-Sep-2026",
+            "created_at": "2026-09-19 09:00"
+        }
+    ],
     "inventory": [
         {
             "sku": "SKU-AMUL-01",
@@ -169,8 +206,11 @@ def load_db(username: str = None) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    # Auto-heal: Ensure every merchant always has active inventory, supplier dues, and working capital
+    # Auto-heal: Ensure every merchant always has active inventory, supplier dues, customers udhaar, and working capital
     dirty = False
+    if not user_state.get("customers_udhaar") or not isinstance(user_state.get("customers_udhaar"), list):
+        user_state["customers_udhaar"] = copy.deepcopy(DEFAULT_STATE["customers_udhaar"])
+        dirty = True
     if not user_state.get("inventory"):
         user_state["inventory"] = copy.deepcopy(DEFAULT_STATE["inventory"])
         dirty = True
@@ -230,6 +270,8 @@ def reset_db(username: str = None) -> Dict[str, Any]:
 def add_udhaar(customer_name: str, phone: str, amount: float, items: str, due_date: str = None, username: str = None) -> Dict[str, Any]:
     """Adds a real customer udhaar debt to the merchant's ledger."""
     db = load_db(username)
+    if "customers_udhaar" not in db or not isinstance(db.get("customers_udhaar"), list):
+        db["customers_udhaar"] = []
     new_id = f"UDH-{len(db['customers_udhaar']) + 101}"
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     entry = {
@@ -238,13 +280,13 @@ def add_udhaar(customer_name: str, phone: str, amount: float, items: str, due_da
         "phone": phone or "+91 98765 00000",
         "amount": round(float(amount), 2),
         "days_overdue": 0,
-        "items": items or "Kirana purchase",
+        "items": items or "आवाज़ से दर्ज किराना उधार",
         "status": "ACTIVE",
         "last_reminded": "Just added",
         "due_date": due_date or "Not specified",
         "created_at": now_str
     }
-    db["customers_udhaar"].append(entry)
+    db["customers_udhaar"].insert(0, entry)
     save_db(db, username)
     return entry
 
@@ -252,6 +294,8 @@ def add_udhaar(customer_name: str, phone: str, amount: float, items: str, due_da
 def settle_udhaar(udhaar_id: str, username: str = None) -> Dict[str, Any]:
     """Marks an existing udhaar debt as recovered, adding the amount to cash in hand."""
     db = load_db(username)
+    if "customers_udhaar" not in db or not isinstance(db.get("customers_udhaar"), list):
+        db["customers_udhaar"] = []
     found = None
     for u in db["customers_udhaar"]:
         if u["id"] == udhaar_id:
@@ -260,7 +304,7 @@ def settle_udhaar(udhaar_id: str, username: str = None) -> Dict[str, Any]:
     if found:
         amount = found["amount"]
         db["customers_udhaar"] = [u for u in db["customers_udhaar"] if u["id"] != udhaar_id]
-        db["cash_in_hand"] += amount
+        db["cash_in_hand"] = round(db.get("cash_in_hand", 0.0) + amount, 2)
         save_db(db, username)
         return {"status": "SUCCESS", "recovered_amount": amount, "new_cash": db["cash_in_hand"]}
     return {"status": "NOT_FOUND"}
