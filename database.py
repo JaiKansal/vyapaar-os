@@ -17,41 +17,7 @@ DEFAULT_STATE = {
     "location": "Laxmi Nagar, Delhi NCR",
     "cash_in_hand": 18500.0,
     "daily_sales_avg": 9200.0,
-    "customers_udhaar": [
-        {
-            "id": "UDH-101",
-            "customer_name": "Suresh Sharma",
-            "phone": "+91 98765 43210",
-            "amount": 2450.0,
-            "days_overdue": 14,
-            "items": "2x Basmati Rice 5kg, Cooking Oil 2L, Spices",
-            "status": "OVERDUE",
-            "last_reminded": "3 days ago",
-            "created_at": "2026-09-01 10:30"
-        },
-        {
-            "id": "UDH-102",
-            "customer_name": "Pooja Verma",
-            "phone": "+91 98111 22334",
-            "amount": 1120.0,
-            "days_overdue": 6,
-            "items": "Atta 10kg, Tea Leaves 500g, Sugar 2kg",
-            "status": "PENDING",
-            "last_reminded": "Never",
-            "created_at": "2026-09-09 14:15"
-        },
-        {
-            "id": "UDH-103",
-            "customer_name": "Anil Kumar (Dhaba)",
-            "phone": "+91 99223 88441",
-            "amount": 4800.0,
-            "days_overdue": 21,
-            "items": "Commercial Dal 20kg, Rice 30kg, Mustard Oil",
-            "status": "CRITICAL",
-            "last_reminded": "7 days ago",
-            "created_at": "2026-08-25 18:45"
-        }
-    ],
+    "customers_udhaar": [],
     "inventory": [
         {
             "sku": "SKU-AMUL-01",
@@ -169,7 +135,15 @@ def save_db(data: Dict[str, Any]) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def add_udhaar(customer_name: str, phone: str, amount: float, items: str) -> Dict[str, Any]:
+def reset_db() -> Dict[str, Any]:
+    """Wipes all demo/mock data and resets store state to clean pristine state."""
+    import copy
+    clean = copy.deepcopy(DEFAULT_STATE)
+    save_db(clean)
+    return clean
+
+
+def add_udhaar(customer_name: str, phone: str, amount: float, items: str, due_date: str = None) -> Dict[str, Any]:
     """Adds a real customer udhaar debt to the ledger."""
     db = load_db()
     new_id = f"UDH-{len(db['customers_udhaar']) + 101}"
@@ -183,6 +157,7 @@ def add_udhaar(customer_name: str, phone: str, amount: float, items: str) -> Dic
         "items": items or "Kirana purchase",
         "status": "ACTIVE",
         "last_reminded": "Just added",
+        "due_date": due_date or "Not specified",
         "created_at": now_str
     }
     db["customers_udhaar"].append(entry)

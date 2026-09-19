@@ -2,52 +2,467 @@
   "store_name": "Namaste Kirana & General Store",
   "owner": "Ramesh Gupta",
   "location": "Laxmi Nagar, Delhi NCR",
-  "cash_in_hand": 18500.0,
+  "cash_in_hand": 21962.0,
   "daily_sales_avg": 9200.0,
   "customers_udhaar": [
     {
       "id": "UDH-101",
-      "customer_name": "Suresh Sharma",
-      "phone": "+91 98765 43210",
-      "amount": 2450.0,
-      "days_overdue": 14,
-      "items": "2x Basmati Rice 5kg, Cooking Oil 2L, Spices",
-      "status": "OVERDUE",
-      "last_reminded": "3 days ago",
-      "created_at": "2026-09-01 10:30"
+      "customer_name": "सुरेश शर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "19-Sep-2026",
+      "created_at": "2026-09-19 05:11"
     },
     {
       "id": "UDH-102",
-      "customer_name": "Pooja Verma",
-      "phone": "+91 98111 22334",
-      "amount": 1120.0,
-      "days_overdue": 6,
-      "items": "Atta 10kg, Tea Leaves 500g, Sugar 2kg",
-      "status": "PENDING",
-      "last_reminded": "Never",
-      "created_at": "2026-09-09 14:15"
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg आटा + 2kg चीनी",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "19-Sep-2026",
+      "created_at": "2026-09-19 05:11"
     },
     {
       "id": "UDH-103",
-      "customer_name": "Anil Kumar (Dhaba)",
-      "phone": "+91 99223 88441",
-      "amount": 4800.0,
-      "days_overdue": 21,
-      "items": "Commercial Dal 20kg, Rice 30kg, Mustard Oil",
-      "status": "CRITICAL",
-      "last_reminded": "7 days ago",
-      "created_at": "2026-08-25 18:45"
+      "customer_name": "ढाबा अनिल",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "19-Sep-2026",
+      "created_at": "2026-09-19 05:11"
     },
     {
       "id": "UDH-104",
-      "customer_name": "सुरेश शर्मा",
+      "customer_name": "रमेश जी",
       "phone": "+91 98765 00000",
-      "amount": 100.0,
+      "amount": 500.0,
       "days_overdue": 0,
-      "items": "दुकान से किराना सामान",
+      "items": "किराना सामान",
       "status": "ACTIVE",
       "last_reminded": "Just added",
-      "created_at": "2026-09-15 09:55"
+      "due_date": "19-Sep-2026",
+      "created_at": "2026-09-19 05:11"
+    },
+    {
+      "id": "UDH-105",
+      "customer_name": "सुरेश शर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "19-Sep-2026",
+      "created_at": "2026-09-19 05:11"
+    },
+    {
+      "id": "UDH-106",
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg आटा + 2kg चीनी",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "19-Sep-2026",
+      "created_at": "2026-09-19 05:11"
+    },
+    {
+      "id": "UDH-107",
+      "customer_name": "ढाबा अनिल",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "19-Sep-2026",
+      "created_at": "2026-09-19 05:11"
+    },
+    {
+      "id": "UDH-108",
+      "customer_name": "रमेश जी",
+      "phone": "+91 98765 00000",
+      "amount": 500.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "19-Sep-2026",
+      "created_at": "2026-09-19 05:11"
+    },
+    {
+      "id": "UDH-109",
+      "customer_name": "Suresh Sharma",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2x Fortune Oil + 5kg Basmati",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:37"
+    },
+    {
+      "id": "UDH-110",
+      "customer_name": "Pooja Verma",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg Atta + 2kg Sugar",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:37"
+    },
+    {
+      "id": "UDH-111",
+      "customer_name": "Anil Kumar (Dhaba)",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "Kirana goods",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:37"
+    },
+    {
+      "id": "UDH-112",
+      "customer_name": "सुरेश शर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:37"
+    },
+    {
+      "id": "UDH-113",
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg आटा + 2kg चीनी",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:37"
+    },
+    {
+      "id": "UDH-114",
+      "customer_name": "गोयल डेयरी सप्लाई आगमन",
+      "phone": "+91 98765 00000",
+      "amount": 1080.0,
+      "days_overdue": 0,
+      "items": "40 पैकेट अमूल दूध",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:37"
+    },
+    {
+      "id": "UDH-115",
+      "customer_name": "ढाबा अनिल",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:37"
+    },
+    {
+      "id": "UDH-116",
+      "customer_name": "कुल नया उधार",
+      "phone": "+91 98765 00000",
+      "amount": 2670.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:37"
+    },
+    {
+      "id": "UDH-117",
+      "customer_name": "Suresh Sharma",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2x Fortune Oil + 5kg Basmati",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:38"
+    },
+    {
+      "id": "UDH-118",
+      "customer_name": "Pooja Verma",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg Atta + 2kg Sugar",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:38"
+    },
+    {
+      "id": "UDH-119",
+      "customer_name": "Anil Kumar (Dhaba)",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "Kirana goods",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:38"
+    },
+    {
+      "id": "UDH-120",
+      "customer_name": "सुरेश शर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:38"
+    },
+    {
+      "id": "UDH-121",
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg आटा + 2kg चीनी",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:38"
+    },
+    {
+      "id": "UDH-122",
+      "customer_name": "गोयल डेयरी सप्लाई आगमन",
+      "phone": "+91 98765 00000",
+      "amount": 1080.0,
+      "days_overdue": 0,
+      "items": "40 पैकेट अमूल दूध",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:38"
+    },
+    {
+      "id": "UDH-123",
+      "customer_name": "ढाबा अनिल",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:38"
+    },
+    {
+      "id": "UDH-124",
+      "customer_name": "सुरेश शर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:39"
+    },
+    {
+      "id": "UDH-125",
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg आटा + 2kg चीनी",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:39"
+    },
+    {
+      "id": "UDH-126",
+      "customer_name": "गोयल डेयरी सप्लाई आगमन",
+      "phone": "+91 98765 00000",
+      "amount": 1080.0,
+      "days_overdue": 0,
+      "items": "40 पैकेट अमूल दूध",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:39"
+    },
+    {
+      "id": "UDH-127",
+      "customer_name": "ढाबा अनिल",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:39"
+    },
+    {
+      "id": "UDH-128",
+      "customer_name": "सुरेश शर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2 पैकेट तेल",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "Not specified",
+      "created_at": "2026-09-19 05:44"
+    },
+    {
+      "id": "UDH-129",
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg आटा",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "Not specified",
+      "created_at": "2026-09-19 05:44"
+    },
+    {
+      "id": "UDH-130",
+      "customer_name": "Suresh Sharma",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2x Fortune Oil + 5kg Basmati",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:44"
+    },
+    {
+      "id": "UDH-131",
+      "customer_name": "Pooja Verma",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg Atta + 2kg Sugar",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:44"
+    },
+    {
+      "id": "UDH-132",
+      "customer_name": "Anil Kumar (Dhaba)",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "Kirana goods",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "created_at": "2026-09-19 05:44"
+    },
+    {
+      "id": "UDH-133",
+      "customer_name": "सुरेश शर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2 पैकेट तेल",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "Not specified",
+      "created_at": "2026-09-19 05:45"
+    },
+    {
+      "id": "UDH-134",
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg आटा",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "Not specified",
+      "created_at": "2026-09-19 05:45"
+    },
+    {
+      "id": "UDH-135",
+      "customer_name": "ढाबा अनिल",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "Not specified",
+      "created_at": "2026-09-19 05:45"
+    },
+    {
+      "id": "UDH-136",
+      "customer_name": "सुरेश Ji",
+      "phone": "+91 98765 00000",
+      "amount": 850.0,
+      "days_overdue": 0,
+      "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:46"
+    },
+    {
+      "id": "UDH-137",
+      "customer_name": "पूजा वर्मा",
+      "phone": "+91 98765 00000",
+      "amount": 620.0,
+      "days_overdue": 0,
+      "items": "10kg आटा + 2kg चीनी",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:46"
+    },
+    {
+      "id": "UDH-138",
+      "customer_name": "गोयल डेयरी सप्लाई आगमन",
+      "phone": "+91 98765 00000",
+      "amount": 1080.0,
+      "days_overdue": 0,
+      "items": "40 पैकेट अमूल दूध",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:46"
+    },
+    {
+      "id": "UDH-139",
+      "customer_name": "ढाबा अनिल",
+      "phone": "+91 98765 00000",
+      "amount": 1200.0,
+      "days_overdue": 0,
+      "items": "किराना सामान",
+      "status": "ACTIVE",
+      "last_reminded": "Just added",
+      "due_date": "14-Sep-2026",
+      "created_at": "2026-09-19 05:46"
     }
   ],
   "inventory": [
@@ -146,33 +561,446 @@
   ],
   "action_logs": [
     {
-      "id": "ACT-102",
-      "timestamp": "10:26 AM, 15 Sep",
-      "action_type": "VOICE_MEMO",
-      "description": "Recorded merchant voice memo: 'à¤¸à¥à¤°à¥à¤¶ à¤¶à¤°à¥à¤®à¤¾ à¤à¤¾ 850 à¤°à¥à¤ªà¤¯à¥ à¤à¤¾ à¤°à¤¾à¤¶à¤¨ à¤à¤§à¤¾à¤° à¤²à¤¿à¤ à¤²à¥'",
+      "id": "ACT-113",
+      "timestamp": "05:46 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्ची पर्ची' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "सुरेश Ji",
+            "amount": 850.0,
+            "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा + 2kg चीनी",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "गोयल डेयरी सप्लाई आगमन",
+            "amount": 1080.0,
+            "items": "40 पैकेट अमूल दूध",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "ढाबा अनिल",
+            "amount": 1200.0,
+            "items": "किराना सामान",
+            "due_date": "14-Sep-2026"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-112",
+      "timestamp": "05:45 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्ची पर्ची' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "सुरेश शर्मा",
+            "amount": 850.0,
+            "items": "2 पैकेट तेल"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा"
+          },
+          {
+            "customer": "ढाबा अनिल",
+            "amount": 1200.0,
+            "items": "किराना सामान"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-111",
+      "timestamp": "05:44 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्चा पर्चा (Kirana Daily Slip)' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "Suresh Sharma",
+            "amount": 850.0,
+            "items": "2x Fortune Oil + 5kg Basmati"
+          },
+          {
+            "customer": "Pooja Verma",
+            "amount": 620.0,
+            "items": "10kg Atta + 2kg Sugar"
+          },
+          {
+            "customer": "Anil Kumar (Dhaba)",
+            "amount": 1200.0,
+            "items": "Kirana goods"
+          }
+        ],
+        "supplier_deliveries": [
+          {
+            "supplier": "Goyal Dairy Distributors",
+            "item": "Amul Milk 40 pkts",
+            "payable": 780.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-110",
+      "timestamp": "05:44 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्ची पर्ची' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "सुरेश शर्मा",
+            "amount": 850.0,
+            "items": "2 पैकेट तेल"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-109",
+      "timestamp": "05:39 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्चा पर्चा (Kirana Daily Slip)' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "सुरेश शर्मा",
+            "amount": 850.0,
+            "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा + 2kg चीनी",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "गोयल डेयरी सप्लाई आगमन",
+            "amount": 1080.0,
+            "items": "40 पैकेट अमूल दूध",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "ढाबा अनिल",
+            "amount": 1200.0,
+            "items": "किराना सामान",
+            "due_date": "14-Sep-2026"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-108",
+      "timestamp": "05:38 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्चा पर्चा (Kirana Daily Slip)' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "सुरेश शर्मा",
+            "amount": 850.0,
+            "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा + 2kg चीनी",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "गोयल डेयरी सप्लाई आगमन",
+            "amount": 1080.0,
+            "items": "40 पैकेट अमूल दूध",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "ढाबा अनिल",
+            "amount": 1200.0,
+            "items": "किराना सामान",
+            "due_date": "14-Sep-2026"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-107",
+      "timestamp": "05:38 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्चा पर्चा (Kirana Daily Slip)' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "Suresh Sharma",
+            "amount": 850.0,
+            "items": "2x Fortune Oil + 5kg Basmati"
+          },
+          {
+            "customer": "Pooja Verma",
+            "amount": 620.0,
+            "items": "10kg Atta + 2kg Sugar"
+          },
+          {
+            "customer": "Anil Kumar (Dhaba)",
+            "amount": 1200.0,
+            "items": "Kirana goods"
+          }
+        ],
+        "supplier_deliveries": [
+          {
+            "supplier": "Goyal Dairy Distributors",
+            "item": "Amul Milk 40 pkts",
+            "payable": 780.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-106",
+      "timestamp": "05:37 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्चा पर्चा (Kirana Daily Slip)' into real ledger",
       "guardrail_status": "PASSED (Zero Financial Hallucination)",
       "n8n_orchestration": "Deterministic Engine (Local Guardrail Verified)",
       "payload": {
-        "text": "à¤¸à¥à¤°à¥à¤¶ à¤¶à¤°à¥à¤®à¤¾ à¤à¤¾ 850 à¤°à¥à¤ªà¤¯à¥ à¤à¤¾ à¤°à¤¾à¤¶à¤¨ à¤à¤§à¤¾à¤° à¤²à¤¿à¤ à¤²à¥"
+        "new_udhaars": [
+          {
+            "customer": "सुरेश शर्मा",
+            "amount": 850.0,
+            "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा + 2kg चीनी",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "गोयल डेयरी सप्लाई आगमन",
+            "amount": 1080.0,
+            "items": "40 पैकेट अमूल दूध",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "ढाबा अनिल",
+            "amount": 1200.0,
+            "items": "किराना सामान",
+            "due_date": "14-Sep-2026"
+          },
+          {
+            "customer": "कुल नया उधार",
+            "amount": 2670.0,
+            "items": "किराना सामान",
+            "due_date": "14-Sep-2026"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-105",
+      "timestamp": "05:37 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्चा पर्चा (Kirana Daily Slip)' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "Suresh Sharma",
+            "amount": 850.0,
+            "items": "2x Fortune Oil + 5kg Basmati"
+          },
+          {
+            "customer": "Pooja Verma",
+            "amount": 620.0,
+            "items": "10kg Atta + 2kg Sugar"
+          },
+          {
+            "customer": "Anil Kumar (Dhaba)",
+            "amount": 1200.0,
+            "items": "Kirana goods"
+          }
+        ],
+        "supplier_deliveries": [
+          {
+            "supplier": "Goyal Dairy Distributors",
+            "item": "Amul Milk 40 pkts",
+            "payable": 780.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-104",
+      "timestamp": "05:11 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्ची पर्ची' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "सुरेश शर्मा",
+            "amount": 850.0,
+            "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा + 2kg चीनी",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "ढाबा अनिल",
+            "amount": 1200.0,
+            "items": "किराना सामान",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "रमेश जी",
+            "amount": 500.0,
+            "items": "किराना सामान",
+            "due_date": "19-Sep-2026"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-103",
+      "timestamp": "05:11 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्ची पर्ची' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "सुरेश शर्मा",
+            "amount": 850.0,
+            "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा + 2kg चीनी",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "ढाबा अनिल",
+            "amount": 1200.0,
+            "items": "किराना सामान",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "रमेश जी",
+            "amount": 500.0,
+            "items": "किराना सामान",
+            "due_date": "19-Sep-2026"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ACT-102",
+      "timestamp": "05:10 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्चा पर्चा (Kirana Daily Slip)' into real ledger",
+      "guardrail_status": "PASSED (Zero Financial Hallucination)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
+      "payload": {
+        "new_udhaars": [
+          {
+            "customer": "Suresh Sharma",
+            "amount": 850.0,
+            "items": "2x Fortune Oil + 5kg Basmati"
+          },
+          {
+            "customer": "Pooja Verma",
+            "amount": 620.0,
+            "items": "10kg Atta + 2kg Sugar"
+          },
+          {
+            "customer": "Anil Kumar (Dhaba)",
+            "amount": 1200.0,
+            "items": "Kirana goods"
+          }
+        ],
+        "supplier_deliveries": [
+          {
+            "supplier": "Goyal Dairy Distributors",
+            "item": "Amul Milk 40 pkts",
+            "payable": 780.0
+          }
+        ]
       }
     },
     {
       "id": "ACT-101",
-      "timestamp": "09:55 AM, 15 Sep",
-      "action_type": "RECORD_UDHAAR",
-      "description": "Spoken udhaar recorded: सुरेश शर्मा owes ₹100.00",
+      "timestamp": "05:10 AM, 19 Sep",
+      "action_type": "SLIP_INGESTED",
+      "description": "Ingested kacha slip 'हस्तलिखित कच्ची पर्ची' into real ledger",
       "guardrail_status": "PASSED (Zero Financial Hallucination)",
-      "n8n_orchestration": "Deterministic Engine (Local Guardrail Verified)",
+      "n8n_orchestration": "n8n Webhook Dispatched (Live)",
       "payload": {
-        "id": "UDH-104",
-        "customer_name": "सुरेश शर्मा",
-        "phone": "+91 98765 00000",
-        "amount": 100.0,
-        "days_overdue": 0,
-        "items": "दुकान से किराना सामान",
-        "status": "ACTIVE",
-        "last_reminded": "Just added",
-        "created_at": "2026-09-15 09:55"
+        "new_udhaars": [
+          {
+            "customer": "सुरेश शर्मा",
+            "amount": 850.0,
+            "items": "2 पैकेट फॉर्च्यून तेल + 5kg बासमती",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "पूजा वर्मा",
+            "amount": 620.0,
+            "items": "10kg आटा + 2kg चीनी",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "ढाबा अनिल",
+            "amount": 1200.0,
+            "items": "किराना सामान",
+            "due_date": "19-Sep-2026"
+          },
+          {
+            "customer": "रमेश जी",
+            "amount": 500.0,
+            "items": "किराना सामान",
+            "due_date": "19-Sep-2026"
+          }
+        ]
       }
     }
   ],

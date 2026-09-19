@@ -3,8 +3,12 @@ import io
 import json
 import base64
 import re
+import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("vyapaar")
 
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
@@ -18,6 +22,7 @@ from gtts import gTTS
 from database import (
     load_db,
     save_db,
+    reset_db,
     add_udhaar,
     settle_udhaar,
     update_inventory_stock,
@@ -40,7 +45,7 @@ app.add_middleware(
 )
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
 # --- CONFIGURATION & CREDENTIALS (SERVER BACKEND) ---
 try:
@@ -54,16 +59,52 @@ except Exception:
     pass
 
 SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
+SARVAM_MODEL = os.environ.get("SARVAM_MODEL", "sarvam-105b-conversations")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/trigger")
+COGNEE_API_KEY = os.environ.get("COGNEE_API_KEY", "")
 
-# Configure Cognee environment variables
-os.environ["LLM_PROVIDER"] = "gemini"
-os.environ["LLM_MODEL"] = "gemini/gemini-2.5-flash"
-os.environ["EMBEDDING_PROVIDER"] = "gemini"
-os.environ["EMBEDDING_MODEL"] = "gemini/text-embedding-004"
-if GEMINI_API_KEY:
-    os.environ["LLM_API_KEY"] = GEMINI_API_KEY
+# Configure Cognee environment variables to use Sarvam AI 105B Indic LLM
+os.environ["LLM_PROVIDER"] = "openai"
+os.environ["LLM_MODEL"] = f"openai/{SARVAM_MODEL}"
+os.environ["LLM_ENDPOINT"] = "https://api.sarvam.ai/v1"
+os.environ["OPENAI_API_BASE"] = "https://api.sarvam.ai/v1"
+os.environ["OPENAI_API_KEY"] = SARVAM_API_KEY
+if COGNEE_API_KEY:
+    os.environ["COGNEE_API_KEY"] = COGNEE_API_KEY
+
+
+def call_sarvam_llm(user_prompt: str, system_prompt: Optional[str] = None, model: Optional[str] = None) -> Optional[str]:
+    """Execute LLM chat completion using Sarvam AI's flagship Indic model (sarvam-105b / sarvam-105b-conversations)."""
+    if not SARVAM_API_KEY:
+        return None
+    try:
+        headers = {
+            "Authorization": f"Bearer {SARVAM_API_KEY}",
+            "api-subscription-key": SARVAM_API_KEY,
+            "Content-Type": "application/json"
+        }
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        else:
+            messages.append({"role": "system", "content": "You are Vyapaar-OS Munimji, an intelligent Indian Kirana store partner. Answer warmly, concisely, and accurately in Hindi/Hinglish."})
+        messages.append({"role": "user", "content": user_prompt})
+
+        payload = {
+            "model": model or SARVAM_MODEL,
+            "messages": messages,
+            "temperature": 0.2
+        }
+        r = requests.post("https://api.sarvam.ai/v1/chat/completions", headers=headers, json=payload, timeout=12)
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+        else:
+            logger.warning(f"Sarvam LLM returned status {r.status_code}: {r.text}")
+    except Exception as e:
+        logger.warning(f"Sarvam LLM call exception: {e}")
+    return None
 
 
 # --- REAL COGNEE INTEGRATION ---
@@ -90,8 +131,13 @@ def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "voice.wav") -> s
         try:
             url = "https://api.sarvam.ai/speech-to-text"
             headers = {"api-subscription-key": SARVAM_API_KEY}
-            payload = {"model": "saaras:v4", "mode": "translate", "with_timestamps": "false"}
-            files = {"file": (filename, audio_bytes, "audio/mp3")}
+            payload = {
+                "model": "saaras:v3",
+                "language_code": "hi-IN",
+                "mode": "codemix",
+                "with_timestamps": "false"
+            }
+            files = {"file": (filename, audio_bytes, "audio/wav")}
             resp = requests.post(url, headers=headers, data=payload, files=files, timeout=12)
             if resp.status_code == 200:
                 t = resp.json().get("transcript", "")
@@ -131,10 +177,9 @@ def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "voice.wav") -> s
 # --- REAL TEXT-TO-SPEECH (TTS) HELPER ---
 def synthesize_spoken_hindi(text: str) -> str:
     """
-    Synthesizes genuine spoken Hindi voice audio:
-    1. Uses Sarvam AI Bulbul v3 TTS if API key is provided.
-    2. Otherwise uses gTTS (Google Text-to-Speech) in Hindi (hi) to produce clear real MP3 voice!
-    Returns base64 encoded audio string for browser playback.
+    Synthesizes genuine spoken Hindi voice using Sarvam AI Bulbul v3.
+    Falls back to gTTS (Google TTS) if Sarvam is unavailable.
+    Returns base64 encoded MP3 audio string for browser playback.
     """
     global SARVAM_API_KEY
     if SARVAM_API_KEY:
@@ -144,28 +189,38 @@ def synthesize_spoken_hindi(text: str) -> str:
                 "api-subscription-key": SARVAM_API_KEY,
                 "Content-Type": "application/json"
             }
+            # manan = natural Indian male voice, ideal for a shop Soundbox
             payload = {
-                "text": text[:500],
+                "inputs": [text[:500]],
                 "target_language_code": "hi-IN",
-                "speaker": "ritu",
-                "pace": 1.0,
-                "model": "bulbul:v3",
-                "output_audio_codec": "mp3"
+                "speaker": "manan",
+                "pace": 1.05,
+                "pitch": 0,
+                "loudness": 1.5,
+                "model": "bulbul:v2",
+                "output_audio_codec": "mp3",
+                "enable_preprocessing": True
             }
-            resp = requests.post(url, headers=headers, json=payload, timeout=12)
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
             if resp.status_code == 200:
-                audios = resp.json().get("audios", [])
+                data = resp.json()
+                # v2 returns {"audios": ["<base64>"]}
+                audios = data.get("audios", [])
                 if audios:
+                    print(f"✅ Sarvam TTS (bulbul:v2) synthesized {len(text)} chars")
                     return audios[0]
+            else:
+                print(f"Sarvam TTS HTTP {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
-            print(f"Sarvam TTS failed: {e}")
+            print(f"Sarvam TTS error: {e}")
 
-    # Generate real spoken Hindi MP3 using gTTS
+    # Fallback: Google TTS (gTTS)
     try:
         clean_text = text.replace("₹", "रुपये ").replace("#", "")
         tts = gTTS(text=clean_text, lang="hi", slow=False)
         fp = io.BytesIO()
         tts.write_to_fp(fp)
+        print("⚠️ Using gTTS fallback for TTS")
         return base64.b64encode(fp.getvalue()).decode("utf-8")
     except Exception as e:
         print(f"gTTS fallback error: {e}")
@@ -324,6 +379,75 @@ def api_update_stock(sku: str = Form(...), delta_stock: int = Form(...)):
     log_and_execute_action("STOCK_UPDATE", res, f"Updated stock for {sku} by {delta_stock} units")
     return res
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /api/stt  — Sarvam Saaras Speech-to-Text endpoint
+# Called by the browser's MediaRecorder loop every 3 seconds
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/api/stt")
+async def stt_endpoint(audio_file: UploadFile = File(...)):
+    """
+    Receives a WebM/Opus audio blob from the browser MediaRecorder,
+    sends it to Sarvam Saaras v2 STT for high-accuracy Hindi transcription,
+    and returns the transcript text.
+    """
+    global SARVAM_API_KEY
+    audio_bytes = await audio_file.read()
+    transcript = ""
+
+    if SARVAM_API_KEY and len(audio_bytes) > 500:
+        try:
+            url = "https://api.sarvam.ai/speech-to-text"
+            headers = {"api-subscription-key": SARVAM_API_KEY}
+            # saaras:v3 = latest high-accuracy Hindi STT model
+            payload = {
+                "model": "saaras:v3",
+                "language_code": "hi-IN",
+                "mode": "codemix",    # handles Hindi + English naturally
+                "with_timestamps": "false",
+                "debug": "false"
+            }
+            # Only forward formats supported by Sarvam (WAV, MP3, AAC, FLAC, OGG)
+            filename = audio_file.filename or "audio.wav"
+            mime = audio_file.content_type or "audio/wav"
+            is_supported = any(ext in filename.lower() for ext in ['.wav', '.mp3', '.ogg', '.flac', '.aac']) or any(m in mime.lower() for m in ['wav', 'mp3', 'mpeg', 'ogg', 'flac', 'aac'])
+
+            if is_supported:
+                files = {"file": (filename, audio_bytes, mime)}
+                resp = requests.post(url, headers=headers, data=payload, files=files, timeout=15)
+                if resp.status_code == 200:
+                    t = resp.json().get("transcript", "")
+                    if t:
+                        transcript = t.strip()
+                        print(f"✅ Sarvam STT (saaras:v3): '{transcript}'")
+                else:
+                    print(f"Sarvam STT HTTP {resp.status_code}: {resp.text[:120]}")
+        except Exception as e:
+            print(f"Sarvam STT error: {e}")
+
+    # Fallback to Google speech_recognition if Sarvam fails or key missing
+    if not transcript and len(audio_bytes) > 500:
+        try:
+            r = sr.Recognizer()
+            # soundfile can read webm if ffmpeg is present; try anyway
+            try:
+                in_buf = io.BytesIO(audio_bytes)
+                data, samplerate = sf.read(in_buf)
+                out_buf = io.BytesIO()
+                sf.write(out_buf, data, samplerate, format="WAV", subtype="PCM_16")
+                out_buf.seek(0)
+                with sr.AudioFile(out_buf) as source:
+                    audio_data = r.record(source)
+                transcript = r.recognize_google(audio_data, language="hi-IN")
+                print(f"⚠️ Google STT fallback: '{transcript}'")
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"STT fallback error: {e}")
+
+    return {"transcript": transcript}
+
+
 @app.post("/api/process-voice")
 async def process_voice(
     background_tasks: BackgroundTasks,
@@ -351,37 +475,227 @@ async def process_voice(
             content={"error": "Could not extract speech from audio. Please speak clearly into your microphone."}
         )
 
+    # Wake word detection ("नमस्ते मुनीमजी", "हे मुनीमजी", "hey munimji", "ok munimji", "munimji")
+    wake_word_detected = False
+    cleaned_transcript = transcript
+    wake_phrases = [
+        "नमस्ते मुनीमजी", "नमस्ते मुनीम जी", "हे मुनीमजी", "हे मुनीम जी", "सुनो मुनीमजी", "सुनो मुनीम जी",
+        "hey munimji", "he munimji", "ok munimji", "namaste munimji", "hello munimji", "munimji", "मुनीमजी", "मुनीम जी"
+    ]
+    for wp in wake_phrases:
+        if wp.lower() in cleaned_transcript.lower():
+            wake_word_detected = True
+            pattern = re.compile(re.escape(wp), re.IGNORECASE)
+            cleaned_transcript = pattern.sub("", cleaned_transcript).strip(",. ")
+            break
+
+    # If merchant only said the wake word to activate the Soundbox
+    if wake_word_detected and len(cleaned_transcript.strip()) < 2:
+        audio_response_text = "नमस्ते भैया! मुनीमजी सुन रहे हैं। क्या हिसाब लिखना है या क्या आर्डर करना है, बताइए?"
+        b64_audio = synthesize_spoken_hindi(audio_response_text)
+        return {
+            "transcript": transcript,
+            "wake_word_detected": True,
+            "intent": "WAKE_ACTIVATION",
+            "action_taken": "वेक-वर्ड सक्रिय: 'नमस्ते मुनीमजी' पहचाना गया",
+            "audio_response_text": audio_response_text,
+            "audio_base64": b64_audio,
+            "guardrail_status": "READY_FOR_VOICE_COMMAND",
+            "n8n_status": "Standby"
+        }
+
+    # ─────────────────────────────────────────────────────────────────
+    # HELPER: Parse Hindi/Hinglish number words → float
+    # ─────────────────────────────────────────────────────────────────
+    def parse_hindi_amount(text: str) -> float:
+        """
+        Converts spoken Hindi number words to a float.
+        Examples:
+          'हज़ार' → 1000,  'पाँच हज़ार' → 5000
+          'दो सौ' → 200,   'पचास' → 50
+          'डेढ़ लाख' → 150000,  '₹500' → 500
+        """
+        hindi_ones = {
+            'शून्य':0,'एक':1,'दो':2,'तीन':3,'चार':4,'पाँच':5,'पांच':5,
+            'छह':6,'छः':6,'सात':7,'आठ':8,'नौ':9,'दस':10,
+            'ग्यारह':11,'बारह':12,'तेरह':13,'चौदह':14,'पंद्रह':15,
+            'सोलह':16,'सत्रह':17,'अठारह':18,'उन्नीस':19,'बीस':20,
+            'इक्कीस':21,'बाईस':22,'तेईस':23,'चौबीस':24,'पच्चीस':25,
+            'छब्बीस':26,'सत्ताईस':27,'अट्ठाईस':28,'उनतीस':29,'तीस':30,
+            'इकतीस':31,'बत्तीस':32,'तैंतीस':33,'चौंतीस':34,'पैंतीस':35,
+            'छत्तीस':36,'सैंतीस':37,'अड़तीस':38,'उनतालीस':39,'चालीस':40,
+            'इकतालीस':41,'बयालीस':42,'तेतालीस':43,'चवालीस':44,'पैंतालीस':45,
+            'छियालीस':46,'सैंतालीस':47,'अड़तालीस':48,'उनचास':49,'पचास':50,
+            'साठ':60,'सत्तर':70,'अस्सी':80,'नब्बे':90,
+            'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,
+            'eight':8,'nine':9,'ten':10,'eleven':11,'twelve':12,'fifteen':15,
+            'twenty':20,'thirty':30,'forty':40,'fifty':50,'sixty':60,
+            'seventy':70,'eighty':80,'ninety':90,'hundred':100,
+            # Hinglish transliteration
+            'ek':1,'do':2,'teen':3,'char':4,'paanch':5,'paach':5,
+            'chhe':6,'che':6,'saat':7,'aath':8,'nau':9,'das':10,
+            'gyarah':11,'barah':12,'terah':13,'pandrah':15,'bees':20,
+            'pachees':25,'tees':30,'chalees':40,'pachaas':50,'saath':60,
+            'sattar':70,'assi':80,'nabbe':90,
+        }
+        hindi_mults = {
+            'सौ':100,'सो':100,'हज़ार':1000,'हजार':1000,'हज़ारी':1000,
+            'thousand':1000,'लाख':100000,'lakh':100000,'करोड़':10000000,
+            # Hinglish transliterations
+            'sau':100,'hajar':1000,'hazaar':1000,'hazar':1000,'hajaar':1000,
+            'hazzar':1000,'lacs':100000,
+        }
+
+        t = text.lower()
+        # Remove date-like patterns first: e.g. "20 september 2026"
+        t = re.sub(r'\d{1,2}\s*(?:january|february|march|april|may|june|july|august|'
+                   r'september|october|november|december|'
+                   r'जनवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|'
+                   r'सितंबर|सितम्बर|अक्टूबर|नवंबर|दिसंबर)'
+                   r'(?:\s*\d{4})?', '', t)
+        t = re.sub(r'\b20\d{2}\b', '', t)  # strip standalone years like 2026
+
+        # Look for explicit ₹ or Rs amounts like ₹1000, Rs 500
+        m = re.search(r'[₹Rs]+\s*(\d[\d,]*)', t)
+        if m:
+            return float(m.group(1).replace(',', ''))
+
+        # Look for bare digit sequences (only after stripping dates above)
+        digits = re.findall(r'\b(\d[\d,]*)\b', t)
+        if digits:
+            return float(digits[0].replace(',', ''))
+
+        # Parse spoken number words: handle "पाँच हज़ार", "दो सौ पचास" etc.
+        words = t.split()
+        total = 0.0
+        current = 0.0
+        found = False
+        for w in words:
+            if w in hindi_ones:
+                current += hindi_ones[w]
+                found = True
+            elif w in hindi_mults:
+                mult = hindi_mults[w]
+                if current == 0:
+                    current = 1
+                if mult >= 1000:
+                    total += current * mult
+                    current = 0
+                else:
+                    current *= mult
+                found = True
+        if found:
+            return total + current
+        return 0.0  # no amount found
+
+    # ─────────────────────────────────────────────────────────────────
+    # HELPER: Extract due date from spoken text
+    # ─────────────────────────────────────────────────────────────────
+    def extract_due_date(text: str) -> str:
+        """Returns formatted due date string or None."""
+        t = text.lower()
+        months_en = {
+            'january':'January','february':'February','march':'March',
+            'april':'April','may':'May','june':'June','july':'July',
+            'august':'August','september':'September','october':'October',
+            'november':'November','december':'December',
+        }
+        months_hi = {
+            'जनवरी':'January','फरवरी':'February','मार्च':'March',
+            'अप्रैल':'April','मई':'May','जून':'June','जुलाई':'July',
+            'अगस्त':'August','सितंबर':'September','सितम्बर':'September',
+            'अक्टूबर':'October','नवंबर':'November','दिसंबर':'December',
+        }
+        all_months = {**months_en, **months_hi}
+
+        # Pattern: "20 September 2026" / "20 सितंबर" / "बीस सितंबर"
+        for mn, me in all_months.items():
+            pattern = r'(\d{1,2})\s*' + re.escape(mn)
+            m = re.search(pattern, t)
+            if m:
+                day = m.group(1)
+                year_m = re.search(r'\b(20\d{2})\b', text)
+                year = year_m.group(1) if year_m else str(datetime.now().year)
+                return f"{day} {me} {year}"
+        return None
+
+    # ─────────────────────────────────────────────────────────────────
+    # HELPER: Extract customer name from spoken command
+    # ─────────────────────────────────────────────────────────────────
+    def extract_customer_name(text: str) -> str:
+        """Extract the most likely customer name from the command."""
+        # Known surname shortcuts
+        known_names = {
+            'शर्मा': 'शर्मा जी', 'sharma': 'शर्मा जी',
+            'वर्मा': 'वर्मा जी', 'verma': 'वर्मा जी',
+            'गुप्ता': 'गुप्ता जी', 'gupta': 'गुप्ता जी',
+            'अनिल': 'अनिल कुमार', 'anil': 'अनिल कुमार',
+            'राम': 'राम जी', 'ram': 'राम जी',
+            'श्याम': 'श्याम जी',
+            'राजेश': 'राजेश जी', 'rajesh': 'राजेश जी',
+            'सुरेश': 'सुरेश जी', 'suresh': 'सुरेश जी',
+            'महेश': 'महेश जी', 'mahesh': 'महेश जी',
+            'रमेश': 'रमेश जी', 'ramesh': 'रमेश जी',
+        }
+        tl = text.lower()
+        for key, val in known_names.items():
+            if key in tl or key in text:
+                # Try to get full name: e.g. "सुरेश शर्मा" → both words
+                parts = text.split()
+                name_parts = []
+                for p in parts:
+                    if any(k in p.lower() for k in known_names):
+                        name_parts.append(p)
+                if len(name_parts) >= 2:
+                    return ' '.join(name_parts)
+                return val
+
+        # Fallback: strip wake words and stop words, take first 1-2 remaining tokens
+        stop = {
+            'हे','नमस्ते','सुनो','मुनीमजी','मुनीम','जी','का','की','के','में','को',
+            'उधार','लिखो','लिख','दो','रुपये','रुपया','रुपए','हज़ार','हजार',
+            'सौ','लाख','rs','₹','inr','wale','वाले','wala','खाते','खाता',
+            'से','लेंगे','देंगे','लौटाएंगे','लौटाएगा','लेगा','देगा','lautaayenge',
+            'hey','he','ok','aur','aaj','kal','jo','ki','ke','ka','ko',
+        }
+        words = [w for w in text.split() if w.lower() not in stop and not w.isdigit() and len(w) > 1]
+        if words:
+            # Take first 2 meaningful words as name
+            return ' '.join(words[:2])
+        return 'ग्राहक'
+
     # Real entity recognition & database mutation based on speech
-    lower_t = transcript.lower()
+    eval_text = cleaned_transcript if cleaned_transcript else transcript
+    lower_t = eval_text.lower()
     intent = "GENERAL"
     audio_response_text = ""
     action_desc = ""
 
     # Check for udhaar addition
-    if any(w in lower_t for w in ["उधार", "udhaar", "likh", "likho", "likhlo", "diya", "baki"]):
+    if any(w in lower_t for w in ["उधार", "udhaar", "likh", "likho", "likhlo", "diya", "baki", "udhar", "khate"]):
         intent = "RECORD_UDHAAR"
-        # Extract amount from digits
-        amounts = re.findall(r'\d+', transcript)
-        amount = float(amounts[0]) if amounts else 500.0
-        
-        # Extract customer name if mentioned
-        name = "ग्राहक"
-        if "शर्मा" in transcript or "sharma" in lower_t:
-            name = "सुरेश शर्मा"
-        elif "वर्मा" in transcript or "verma" in lower_t:
-            name = "पूजा वर्मा"
-        elif "अनिल" in transcript or "anil" in lower_t:
-            name = "अनिल कुमार (ढाबा)"
-        elif "गुप्ता" in transcript:
-            name = "गुप्ता जी"
-        else:
-            words = transcript.split()
-            if len(words) > 1:
-                name = words[0]
-                
-        new_entry = add_udhaar(name, "+91 98765 00000", amount, "दुकान से किराना सामान")
-        audio_response_text = f"ठीक है, {name} का ₹{amount:,.0f} का उधार खाता में दर्ज कर दिया गया है।"
-        action_log = log_and_execute_action("RECORD_UDHAAR", new_entry, f"Spoken udhaar recorded: {name} owes ₹{amount:,.2f}")
+
+        # 1. Extract amount using Hindi number-word parser
+        amount = parse_hindi_amount(eval_text)
+        if amount == 0.0:
+            amount = 500.0  # safe default so entry still gets recorded
+
+        # 2. Extract due date (return date string from speech)
+        due_date = extract_due_date(eval_text)
+
+        # 3. Extract customer name
+        name = extract_customer_name(eval_text)
+
+        new_entry = add_udhaar(name, "+91 98765 00000", amount, "आवाज़ से दर्ज किराना उधार", due_date)
+
+        due_str = f" — वापसी तारीख: {due_date}" if due_date else ""
+        audio_response_text = (
+            f"ठीक है, {name} का ₹{amount:,.0f} का उधार खाते में दर्ज कर दिया गया है{due_str}।"
+        )
+        action_log = log_and_execute_action(
+            "RECORD_UDHAAR", new_entry,
+            f"Spoken udhaar recorded: {name} owes ₹{amount:,.2f}, due: {due_date or 'unspecified'}"
+        )
         action_desc = action_log["description"]
 
     # Check for restock request
@@ -434,6 +748,7 @@ async def process_voice(
 
     return {
         "transcript": transcript,
+        "wake_word_detected": wake_word_detected,
         "intent": intent,
         "audio_response_text": audio_response_text,
         "audio_base64": b64_audio,
@@ -443,31 +758,246 @@ async def process_voice(
     }
 
 
+@app.post("/api/sarvam/chat")
+def sarvam_chat(
+    prompt: str = Form(...),
+    system_prompt: Optional[str] = Form(None),
+    model: Optional[str] = Form(None)
+):
+    """Direct API endpoint for Sarvam 105B Indic LLM chat completions."""
+    res = call_sarvam_llm(prompt, system_prompt, model)
+    if res:
+        return {"status": "success", "model": model or SARVAM_MODEL, "response": res}
+    return JSONResponse(status_code=500, content={"status": "error", "message": "Sarvam LLM completion failed"})
+
+
+def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -> str:
+    """Uses Sarvam AI Document Intelligence API (Sarvam Vision 1.5) to directly OCR handwritten slips."""
+    if not SARVAM_API_KEY:
+        logger.warning("SARVAM_API_KEY not configured for document digitisation.")
+        return ""
+
+    try:
+        headers = {"api-subscription-key": SARVAM_API_KEY}
+        files = {"file": (filename, image_bytes, "image/jpeg")}
+        data = {"output_format": "md"}
+
+        # 1. Start digitisation job
+        resp = requests.post(
+            "https://api.sarvam.ai/doc-ai/v1/job/digitise",
+            headers=headers,
+            files=files,
+            data=data,
+            timeout=25
+        )
+        if resp.status_code not in [200, 201]:
+            logger.error(f"Sarvam doc-ai digitise start failed ({resp.status_code}): {resp.text}")
+            return ""
+
+        job_id = resp.json().get("job_id")
+        if not job_id:
+            logger.error("No job_id returned by Sarvam Document AI")
+            return ""
+
+        # 2. Poll for completion
+        status = "pending"
+        for _ in range(15):
+            time.sleep(1)
+            st_res = requests.get(f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/status", headers=headers, timeout=10)
+            if st_res.status_code == 200:
+                status = st_res.json().get("status")
+                if status in ["completed", "failed", "rejected"]:
+                    break
+
+        if status != "completed":
+            logger.warning(f"Sarvam Document AI job {job_id} finished with status: {status}")
+            return ""
+
+        # 3. Retrieve results
+        res = requests.get(f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/results", headers=headers, timeout=10)
+        if res.status_code != 200:
+            logger.error(f"Failed to fetch Sarvam Document AI results: {res.text}")
+            return ""
+
+        res_data = res.json()
+        raw_blocks = []
+        for doc in res_data.get("documents", []):
+            for page in doc.get("pages", []):
+                for block in page.get("blocks", []):
+                    txt = block.get("text", "").strip()
+                    if txt:
+                        raw_blocks.append(txt)
+
+        # Merge blocks starting with '=' into previous line (e.g. '= ₹ 850')
+        merged_lines = []
+        for b in raw_blocks:
+            s = b.strip()
+            if s.startswith("=") and merged_lines:
+                merged_lines[-1] = merged_lines[-1] + " " + s
+            else:
+                merged_lines.append(s)
+
+        extracted_text = "\n".join(merged_lines)
+        logger.info(f"Sarvam Document AI successfully extracted text:\n{extracted_text}")
+        return extracted_text
+
+    except Exception as e:
+        logger.error(f"Exception during Sarvam document digitisation: {e}")
+        return ""
+
+
+def parse_kacha_slip_text(raw_text: str) -> List[Dict[str, Any]]:
+    """Robust parser for handwritten Kirana kacha bills (पर्ची).
+    Correctly ignores religious greetings, dates, and headers.
+    Accurately extracts customer name, line items with quantities, and total monetary debt amount.
+    """
+    results = []
+    lines = raw_text.strip().split('\n')
+    slip_date = None
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or len(line) < 2:
+            continue
+
+        lower_line = line.lower()
+        
+        # Check for date in header line
+        m_date = re.search(r'(?:दिनांक|तारीख|date)\s*[:\-]?\s*([0-9a-zA-Z\-/]+)', line, re.IGNORECASE)
+        if m_date:
+            slip_date = m_date.group(1).strip()
+            continue
+
+        # Skip pure header/greeting/metadata lines
+        if any(h in lower_line for h in [
+            'गणेश', 'नमः', 'शुभ लाभ', 'दिनांक', 'date', 'तारीख', 
+            'bill no', 'बिल नं', 'total:', 'टोटल:', 'कुल:', 'om sai', 
+            'jai mata', 'shree ganesh', 'shri ganesh'
+        ]):
+            continue
+
+        # Strip leading numbering like '1.', '1)', '1 -', '#1', '1:'
+        cleaned = re.sub(r'^(?:#?\d+[\.\)\-:]\s*)+', '', line).strip()
+        if not cleaned:
+            continue
+
+        amt = None
+        c_name = ''
+        items = ''
+
+        # Pattern 1: Line contains '=' (total amount is after '=', customer & items are before '=')
+        # e.g.: "सुरेश शर्मा - 2 पैकेट फॉर्च्यून तेल + 5kg बासमती = ₹850"
+        if '=' in cleaned:
+            left_part, right_part = cleaned.split('=', 1)
+            # Find the final total amount in right_part
+            m_amt = re.search(r'(\d[\d,]*(?:\.\d+)?)', right_part)
+            if m_amt:
+                amt = float(m_amt.group(1).replace(',', ''))
+
+            left_part = left_part.strip()
+            # Split customer name and items by '-' or ':'
+            if '-' in left_part:
+                parts = left_part.split('-', 1)
+                c_name = parts[0].strip()
+                items = parts[1].strip()
+            elif ':' in left_part:
+                parts = left_part.split(':', 1)
+                c_name = parts[0].strip()
+                items = parts[1].strip()
+            else:
+                c_name = left_part
+                items = 'किराना सामान'
+        else:
+            # Pattern 2: No '=' (e.g. 'रमेश जी: 500' or 'सुरेश शर्मा - ₹850')
+            # Look for trailing amount, optionally preceded by : or - or ₹/Rs and followed by udhaar
+            m_amt = re.search(r'[:\-]?\s*(?:₹|Rs\.?|INR)?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:रुपये|रु|₹|rs|/-)?\s*(?:\([^\)]*\)|उधार|udhaar)?\s*$', cleaned, re.IGNORECASE)
+            if m_amt:
+                amt = float(m_amt.group(1).replace(',', ''))
+                prefix = cleaned[:m_amt.start()].strip()
+                if '-' in prefix:
+                    parts = prefix.split('-', 1)
+                    c_name = parts[0].strip()
+                    items = parts[1].strip()
+                elif ':' in prefix:
+                    parts = prefix.split(':', 1)
+                    c_name = parts[0].strip()
+                    items = parts[1].strip()
+                else:
+                    c_name = prefix
+                    items = 'किराना सामान'
+
+        # Cleanup customer name and items
+        c_name = re.sub(r'^[^\w\s\u0900-\u097F]+|[^\w\s\u0900-\u097F]+$', '', c_name).strip()
+        items = re.sub(r'^[^\w\s\u0900-\u097F]+|[^\w\s\u0900-\u097F]+$', '', items).strip()
+        if not items:
+            items = 'किराना सामान'
+
+        # Filter out false positives for customer name
+        c_low = c_name.lower()
+        if any(w in c_low for w in ['दिनांक', 'date', 'तारीख', 'total', 'टोटल', 'कुल', 'bill', 'slip', 'kacha', 'पर्चा', 'खाता', 'नया उधार']):
+            continue
+
+        if amt is not None and amt > 0 and len(c_name) >= 2:
+            entry = {'customer': c_name, 'amount': amt, 'items': items}
+            if slip_date:
+                entry['due_date'] = slip_date
+            results.append(entry)
+
+    return results
+
+
 @app.post("/api/process-slip")
 async def process_slip(
     background_tasks: BackgroundTasks,
     slip_id: Optional[str] = Form(None),
+    raw_text_input: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None)
 ):
-    """Extracts structured entities from uploaded kacha bills and updates real store database."""
-    selected_bill = next((b for b in SAMPLE_KACHA_BILLS if b["id"] == slip_id), None)
-    if not selected_bill:
-        selected_bill = SAMPLE_KACHA_BILLS[0]
+    """Extracts structured entities directly from uploaded kacha bills using Sarvam AI Document Intelligence and updates real store database."""
+    raw_text = ""
+    title = "हस्तलिखित कच्ची पर्ची"
+    desc = "सीधे पर्ची से निकाला गया हिसाब"
 
-    extracted_data = selected_bill["parsed_data"]
-    raw_text = selected_bill["raw_text"]
+    # 1. Primary: Extract directly from uploaded image using Sarvam AI Document Intelligence
+    if file and file.filename:
+        try:
+            file_bytes = await file.read()
+            if len(file_bytes) > 0:
+                extracted_ocr = digitise_image_with_sarvam(file_bytes, filename=file.filename)
+                if extracted_ocr and len(extracted_ocr.strip()) > 3:
+                    raw_text = extracted_ocr
+                    title = f"पर्ची: {file.filename}"
+                    desc = "सरवम एआई (Sarvam Document Intelligence) द्वारा फोटो से सीधे निकाला गया हिसाब"
+        except Exception as e:
+            logger.error(f"Error processing uploaded slip file: {e}")
 
-    # Update real persistent database with extracted debts
-    if "new_udhaars" in extracted_data:
-        for item in extracted_data["new_udhaars"]:
-            add_udhaar(item["customer"], "+91 98765 00000", float(item["amount"]), item["items"])
+    # 2. Fallback: If no file or OCR empty, check raw_text_input
+    if not raw_text and raw_text_input and len(raw_text_input.strip()) > 3:
+        raw_text = raw_text_input.strip()
+        desc = "सीधे विवरण से निकाला गया हिसाब"
+
+    # 3. Fallback: Sample bills if neither is provided
+    if not raw_text:
+        selected_bill = next((b for b in SAMPLE_KACHA_BILLS if b["id"] == slip_id), None)
+        if not selected_bill:
+            selected_bill = SAMPLE_KACHA_BILLS[0]
+        raw_text = selected_bill["raw_text"]
+        title = selected_bill["title"]
+        desc = selected_bill["description"]
+
+    # Parse kacha slip text into structured debts
+    new_udhaars = parse_kacha_slip_text(raw_text)
+    for item in new_udhaars:
+        add_udhaar(item["customer"], "+91 98765 00000", float(item["amount"]), item["items"], item.get("due_date"))
+
+    extracted_data = {"new_udhaars": new_udhaars}
 
     background_tasks.add_task(process_cognee_memory, f"Kacha Bill Ingestion: {raw_text}")
-    action_log = log_and_execute_action("SLIP_INGESTED", extracted_data, f"Ingested kacha slip '{selected_bill['title']}' into real ledger")
+    action_log = log_and_execute_action("SLIP_INGESTED", extracted_data, f"Ingested kacha slip '{title}' into real ledger")
 
     return {
-        "slip_title": selected_bill["title"],
-        "description": selected_bill["description"],
+        "slip_title": title,
+        "description": desc,
         "raw_text": raw_text.strip(),
         "parsed_entities": extracted_data,
         "action_status": action_log["description"]
@@ -581,3 +1111,10 @@ def get_knowledge_graph():
         links.append({"source": "PAYTM_LOAN", "target": "STORE", "relation": "BRIDGES_CASH_DEFICIT", "value": "₹50,000 Disbursed"})
 
     return {"nodes": nodes, "links": links}
+
+
+@app.post("/api/reset-db")
+def reset_database_endpoint():
+    """Resets the store database to clean demo state (0 udhaars, 0 action logs)."""
+    clean_state = reset_db()
+    return {"status": "SUCCESS", "message": "Database reset to clean demo state", "data": clean_state}

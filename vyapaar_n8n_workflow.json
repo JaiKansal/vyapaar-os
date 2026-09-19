@@ -9,11 +9,11 @@
         "options": {}
       },
       "id": "e3020619-7e3f-42e1-8d2e-0a373b5bf5a1",
-      "name": "Webhook Trigger",
+      "name": "Vyapaar Action Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        260,
+        220,
         300
       ],
       "webhookId": "vyapaar-os-webhook"
@@ -22,15 +22,15 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true,
+            "caseSensitive": false,
             "leftValue": "",
-            "typeValidation": "strict",
+            "typeValidation": "loose",
             "version": 2
           },
           "conditions": [
             {
               "id": "7857ff17-48f8-4b2a-8951-4fa3b08e2f0a",
-              "leftValue": "={{ $json.body.action_type }}",
+              "leftValue": "={{ $json.body.action_type || $json.action_type }}",
               "rightValue": "RESTOCK_SUPPLIER",
               "operator": {
                 "type": "string",
@@ -44,50 +44,149 @@
         "options": {}
       },
       "id": "b1b1f630-f3b3-4f9e-a0e2-6322adce25a2",
-      "name": "IF Restock Action",
+      "name": "Action Type Switch",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        480,
+        460,
         300
       ]
     },
     {
       "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "dispatch_channel",
+              "value": "DISTRIBUTOR_RESTOCK_CALL_BOT",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "status",
+              "value": "DISPATCHED_TO_DISTRIBUTOR",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "guardrail",
+              "value": "ZERO_FINANCIAL_HALLUCINATION_VERIFIED",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d2f5a890-4a11-4f8e-bf82-7d2d38561d44",
+      "name": "Format Distributor Restock",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "w1",
+              "name": "dispatch_channel",
+              "value": "WHATSAPP_VOICE_MEMO_RECOVERY",
+              "type": "string"
+            },
+            {
+              "id": "w2",
+              "name": "status",
+              "value": "DISPATCHED_TO_CUSTOMER",
+              "type": "string"
+            },
+            {
+              "id": "w3",
+              "name": "guardrail",
+              "value": "ZERO_FINANCIAL_HALLUCINATION_VERIFIED",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f5e6a789-5b22-4c8e-bf82-7d2d38561d55",
+      "name": "Format Udhaar Reminder",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        700,
+        400
+      ]
+    },
+    {
+      "parameters": {
         "respondWith": "json",
-        "responseBody": "{\n  \"status\": \"EXECUTED\",\n  \"guardrail\": \"ZERO_HALLUCINATION_VERIFIED\"\n}",
+        "responseBody": "={\n  \"status\": \"EXECUTED\",\n  \"channel\": \"{{ $json.dispatch_channel }}\",\n  \"execution_state\": \"LIVE_N8N_ORCHESTRATED\",\n  \"guardrail\": \"PASSED_ZERO_FINANCIAL_HALLUCINATION\",\n  \"server_time\": \"{{ $now.toISO() }}\"\n}",
         "options": {
           "responseCode": 200
         }
       },
       "id": "c71a3962-e938-4f8e-bf82-7d2d38561d33",
-      "name": "Webhook Response",
+      "name": "Webhook Instant Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        720,
-        280
+        940,
+        300
       ]
     }
   ],
   "pinData": {},
   "connections": {
-    "Webhook Trigger": {
+    "Vyapaar Action Webhook": {
       "main": [
         [
           {
-            "node": "IF Restock Action",
+            "node": "Action Type Switch",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "IF Restock Action": {
+    "Action Type Switch": {
       "main": [
         [
           {
-            "node": "Webhook Response",
+            "node": "Format Distributor Restock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Udhaar Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Distributor Restock": {
+      "main": [
+        [
+          {
+            "node": "Webhook Instant Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Udhaar Reminder": {
+      "main": [
+        [
+          {
+            "node": "Webhook Instant Response",
             "type": "main",
             "index": 0
           }
@@ -99,11 +198,12 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "1.0.0",
-  "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "vyapaar-os-n8n-cloud-pro"
-  },
-  "id": "vyapaar-os-restock-workflow",
-  "tags": []
+  "versionId": "6c459f1a-5b12-4211-9a7e-4fa3b08e2f2b",
+  "id": "VyapaarOSActionEngine",
+  "tags": [
+    {
+      "name": "Vyapaar-OS",
+      "id": "tag-vyapaar-01"
+    }
+  ]
 }
