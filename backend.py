@@ -901,7 +901,12 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
     sarvam_result = ""
     if api_key:
         try:
-            headers = {"api-subscription-key": api_key}
+            # Force uncompressed responses — requests handles gzip but only if
+            # the server sends the right Content-Encoding header reliably
+            headers = {
+                "api-subscription-key": api_key,
+                "Accept-Encoding": "identity",  # prevent gzip compression issues
+            }
             files = {"file": (filename or "slip.jpg", upload_bytes, "image/jpeg")}
             data = {"output_format": "md"}
 
@@ -909,6 +914,7 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
                 "https://api.sarvam.ai/doc-ai/v1/job/digitise",
                 headers=headers, files=files, data=data, timeout=60
             )
+            logger.info(f"Sarvam digitise response: {resp.status_code} {resp.text[:200]}")
             if resp.status_code in [200, 201]:
                 job_id = resp.json().get("job_id", "")
                 if job_id:
@@ -929,6 +935,7 @@ def digitise_image_with_sarvam(image_bytes: bytes, filename: str = "slip.jpg") -
                             f"https://api.sarvam.ai/doc-ai/v1/job/{job_id}/results",
                             headers=headers, timeout=15
                         )
+                        logger.info(f"Sarvam results response: {res.status_code} {res.text[:300]}")
                         if res.status_code == 200:
                             raw_blocks = []
                             for doc in res.json().get("documents", []):
