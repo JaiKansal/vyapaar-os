@@ -486,26 +486,29 @@ if "app_lang" not in st.session_state:
 def T(hi_text, en_text):
     return en_text if st.session_state.get("app_lang") == "English" else hi_text
 
-# --- AUTO-SESSION RESTORATION (Survives Browser Refresh & Git Code Pushes) ---
+# --- AUTO-SESSION RESTORATION (Clean, Crash-Safe Session Recovery) ---
+# Clean any legacy params that crash Streamlit Cloud's internal React router
+for _bad in ["sp", "voice_cmd"]:
+    if _bad in st.query_params:
+        try:
+            del st.query_params[_bad]
+        except Exception:
+            pass
+
 if not st.session_state.get("authenticated", False):
-    q_user = st.query_params.get("u")
-    q_sp = st.query_params.get("sp")
+    q_user = st.query_params.get("user") or st.query_params.get("u")
     if q_user:
         try:
             import auth, database
             prof = auth.get_user(q_user)
-            if not prof and q_sp:
-                try:
-                    decoded = json.loads(base64.urlsafe_b64decode(q_sp.encode()).decode())
-                    if decoded.get("username") == q_user:
-                        prof = auth.restore_user_profile(decoded)
-                except Exception as ex:
-                    print(f"Error decoding session profile: {ex}")
             if prof:
                 st.session_state["authenticated"] = True
-                st.session_state["username"] = q_user
+                st.session_state["username"] = q_user.strip().lower()
                 st.session_state["user_profile"] = prof
-                database.load_db(q_user)
+                database.load_db(q_user.strip().lower())
+                st.query_params["user"] = q_user.strip().lower()
+                if "u" in st.query_params:
+                    del st.query_params["u"]
         except Exception as e:
             print(f"Auto-session recovery exception: {e}")
 
@@ -583,11 +586,7 @@ if not st.session_state.get("authenticated", False):
                     st.session_state["authenticated"] = True
                     st.session_state["username"] = "ramesh"
                     st.session_state["user_profile"] = profile
-                    st.query_params["u"] = "ramesh"
-                    try:
-                        st.query_params["sp"] = base64.urlsafe_b64encode(json.dumps(profile).encode()).decode()
-                    except Exception:
-                        pass
+                    st.query_params["user"] = "ramesh"
                     st.success(T("लॉगिन सफल!", "Login successful!"))
                     time.sleep(0.3)
                     st.rerun()
@@ -628,11 +627,7 @@ if not st.session_state.get("authenticated", False):
                             st.session_state["authenticated"] = True
                             st.session_state["username"] = u_clean
                             st.session_state["user_profile"] = profile
-                            st.query_params["u"] = u_clean
-                            try:
-                                st.query_params["sp"] = base64.urlsafe_b64encode(json.dumps(profile).encode()).decode()
-                            except Exception:
-                                pass
+                            st.query_params["user"] = u_clean
                             st.success(T("लॉगिन सफल!", "Login successful!"))
                             time.sleep(0.3)
                             st.rerun()
@@ -697,11 +692,7 @@ if not st.session_state.get("authenticated", False):
                             st.session_state["authenticated"] = True
                             st.session_state["username"] = su_clean
                             st.session_state["user_profile"] = profile
-                            st.query_params["u"] = su_clean
-                            try:
-                                st.query_params["sp"] = base64.urlsafe_b64encode(json.dumps(profile).encode()).decode()
-                            except Exception:
-                                pass
+                            st.query_params["user"] = su_clean
                             st.success(T("खाता सफलतापूर्वक बन गया! आपका स्वागत है।", "Account created successfully! Welcome."))
                             time.sleep(0.4)
                             st.rerun()
@@ -712,21 +703,6 @@ if not st.session_state.get("authenticated", False):
 
 # --- AUTHENTICATED USER SESSION ---
 current_user = st.session_state.get("username", "ramesh")
-
-# --- WAKE-WORD VOICE COMMAND DISPATCHER (From Browser Soundbox) ---
-if "voice_cmd" in st.query_params:
-    pending_vcmd = st.query_params.get("voice_cmd")
-    st.query_params.pop("voice_cmd", None)
-    if pending_vcmd and len(pending_vcmd.strip()) > 0:
-        with st.spinner(T("साउंडबॉक्स आवाज़ प्रोसेस कर रहा है...", "Soundbox processing voice input...")):
-            try:
-                res = _direct_process_voice(raw_text_input=pending_vcmd, username=current_user)
-                if res and not res.get("error"):
-                    st.session_state["real_voice_result"] = res
-            except Exception as ex:
-                print(f"Voice cmd dispatch error: {ex}")
-        st.rerun()
-
 live_state = get_live_state(current_user)
 if not live_state:
     st.info("🔄 Connecting to Vyapaar-OS backend on port 8000...")
@@ -1195,29 +1171,42 @@ with tab_voice:
                 playChime(880, 1174.66);
 
                 document.getElementById('status_text').innerHTML =
-                    '⏳ <strong>' + (isEnglish ? 'Soundbox updating ledger...' : 'साउंडबॉक्स खाता बही में दर्ज कर रहा है...') + '</strong>';
+                    '✅ <strong>' + (isEnglish ? 'Instruction Captured!' : 'निर्देश दर्ज हो गया!') + '</strong>';
                 document.getElementById('transcript_display').innerHTML =
-                    '✅ <strong style="color:#059669;">' + (isEnglish ? 'Recorded: "' : 'पहचाना गया: "') + cmd + '"</strong>';
+                    '⚡ <strong style="color:#059669;">' + (isEnglish ? 'Captured: "' : 'पहचाना गया: "') + cmd + '"</strong>';
 
-                // Speak quick voice ack
+                // Speak voice confirmation
                 if (window.speechSynthesis) {{
                     try {{
-                        var utt = new SpeechSynthesisUtterance(isEnglish ? "Instruction recorded" : "निर्देश दर्ज हो रहा है");
+                        var utt = new SpeechSynthesisUtterance(isEnglish ? "Instruction recorded" : "नमस्ते, आपका निर्देश सुन लिया गया है");
                         utt.lang = isEnglish ? 'en-IN' : 'hi-IN';
                         window.speechSynthesis.speak(utt);
                     }} catch(e) {{}}
                 }}
 
-                // Sync with Streamlit parent window location to trigger direct in-process database update!
-                setTimeout(function() {{
-                    try {{
-                        var pUrl = new URL(window.parent.location.href);
-                        pUrl.searchParams.set('voice_cmd', cmd);
-                        window.parent.location.href = pUrl.toString();
-                    }} catch(err) {{
-                        console.warn('Parent location sync error:', err);
+                // Safely insert into typed instruction box in parent document if accessible
+                try {{
+                    var doc = window.parent.document;
+                    var inputs = doc.querySelectorAll('input[type="text"]');
+                    for (var k = 0; k < inputs.length; k++) {{
+                        if (inputs[k].placeholder && (inputs[k].placeholder.includes('मुनीम') || inputs[k].placeholder.includes('Munim'))) {{
+                            inputs[k].value = cmd;
+                            inputs[k].dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            inputs[k].dispatchEvent(new Event('change', {{ bubbles: true }}));
+                            break;
+                        }}
                     }}
-                }}, 400);
+                }} catch(err) {{
+                    console.warn('Parent DOM populate:', err);
+                }}
+
+                setTimeout(function() {{
+                    isProcessing = false;
+                    wakeDetected = false;
+                    document.getElementById('status_text').innerHTML =
+                        isEnglish ? '🟢 <strong>Listening Hands-Free • Say: "Hey Munimji"</strong>' :
+                                    '🟢 <strong>सक्रिय • बोलें: "हे मुनीमजी" या कोई भी निर्देश</strong>';
+                }}, 3000);
             }}
 
             // Attempt auto-activation if user already granted permission
