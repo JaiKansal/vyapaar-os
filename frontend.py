@@ -30,6 +30,11 @@ try:
 except Exception:
     pass  # Running locally without st.secrets — .env file handles this
 
+try:
+    import backend
+except Exception as e:
+    print(f"Notice: module-level backend import warning: {e}")
+
 # --- CLOUD & LOCAL BACKEND AUTO-DISCOVERY / AUTO-START ---
 def _find_backend_url():
     # 1. Check if backend is already listening locally
@@ -1729,7 +1734,11 @@ with tab_parchi:
             
             raw_detected = s_res.get('raw_text', '')
             if raw_detected:
-                display_text = backend.clean_ocr_text_for_display(raw_detected) if hasattr(backend, 'clean_ocr_text_for_display') else raw_detected
+                try:
+                    import backend
+                    display_text = backend.clean_ocr_text_for_display(raw_detected)
+                except Exception:
+                    display_text = raw_detected
                 with st.expander(T('👁️ सरवम एआई द्वारा पढ़ा गया मूल पाठ (Detected Text)', '👁️ Original Text Detected by Sarvam AI'), expanded=True):
                     st.code(display_text, language='markdown')
 
