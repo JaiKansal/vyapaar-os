@@ -13,6 +13,69 @@ DB_FILE = os.path.join(os.path.dirname(__file__), "store_database.json")
 STORES_DIR = os.path.join(os.path.dirname(__file__), "data", "stores")
 os.makedirs(STORES_DIR, exist_ok=True)
 
+SAMPLE_KIRANA_CATALOG = [
+    {
+        "sku": "SKU-AMUL-01",
+        "name": "Amul Taaza Milk (500ml)",
+        "category": "डेयरी (Dairy)",
+        "current_stock": 4,
+        "min_threshold": 25,
+        "unit": "packets",
+        "cost_price": 27.0,
+        "selling_price": 28.0,
+        "supplier": "Goyal Dairy Distributors",
+        "status": "LOW_STOCK"
+    },
+    {
+        "sku": "SKU-AASH-02",
+        "name": "Aashirvaad Shudh Chakki Atta (10kg)",
+        "category": "अनाज (Staples)",
+        "current_stock": 2,
+        "min_threshold": 12,
+        "unit": "bags",
+        "cost_price": 410.0,
+        "selling_price": 445.0,
+        "supplier": "Delhi Grain Merchants Syndicate",
+        "status": "LOW_STOCK"
+    },
+    {
+        "sku": "SKU-FORT-03",
+        "name": "Fortune Refined Mustard Oil (1L)",
+        "category": "तेल (Oils)",
+        "current_stock": 6,
+        "min_threshold": 15,
+        "unit": "pouches",
+        "cost_price": 138.0,
+        "selling_price": 152.0,
+        "supplier": "Delhi Grain Merchants Syndicate",
+        "status": "LOW_STOCK"
+    },
+    {
+        "sku": "SKU-MDH-04",
+        "name": "MDH Deggi Mirch (100g)",
+        "category": "मसाले (Spices)",
+        "current_stock": 18,
+        "min_threshold": 8,
+        "unit": "boxes",
+        "cost_price": 82.0,
+        "selling_price": 94.0,
+        "supplier": "Gupta Kirana Wholesalers",
+        "status": "HEALTHY"
+    },
+    {
+        "sku": "SKU-SURF-05",
+        "name": "Surf Excel Quick Wash (1kg)",
+        "category": "FMCG (सफाई)",
+        "current_stock": 1,
+        "min_threshold": 10,
+        "unit": "packs",
+        "cost_price": 140.0,
+        "selling_price": 155.0,
+        "supplier": "HUL City Depot",
+        "status": "CRITICAL"
+    }
+]
+
 DEFAULT_STATE = {
     "store_name": "Namaste Kirana & General Store",
     "owner": "Ramesh Gupta",
@@ -20,68 +83,7 @@ DEFAULT_STATE = {
     "cash_in_hand": 18500.0,
     "daily_sales_avg": 9200.0,
     "customers_udhaar": [],
-    "inventory": [
-        {
-            "sku": "SKU-AMUL-01",
-            "name": "Amul Taaza Milk (500ml)",
-            "category": "Dairy",
-            "current_stock": 4,
-            "min_threshold": 25,
-            "unit": "packets",
-            "cost_price": 27.0,
-            "selling_price": 28.0,
-            "supplier": "Goyal Dairy Distributors",
-            "status": "LOW_STOCK"
-        },
-        {
-            "sku": "SKU-AASH-02",
-            "name": "Aashirvaad Shudh Chakki Atta (10kg)",
-            "category": "Staples",
-            "current_stock": 2,
-            "min_threshold": 12,
-            "unit": "bags",
-            "cost_price": 410.0,
-            "selling_price": 445.0,
-            "supplier": "Delhi Grain Merchants Syndicate",
-            "status": "LOW_STOCK"
-        },
-        {
-            "sku": "SKU-FORT-03",
-            "name": "Fortune Refined Mustard Oil (1L)",
-            "category": "Oils",
-            "current_stock": 6,
-            "min_threshold": 15,
-            "unit": "pouches",
-            "cost_price": 138.0,
-            "selling_price": 152.0,
-            "supplier": "Delhi Grain Merchants Syndicate",
-            "status": "LOW_STOCK"
-        },
-        {
-            "sku": "SKU-MDH-04",
-            "name": "MDH Deggi Mirch (100g)",
-            "category": "Spices",
-            "current_stock": 18,
-            "min_threshold": 8,
-            "unit": "boxes",
-            "cost_price": 82.0,
-            "selling_price": 94.0,
-            "supplier": "Gupta Kirana Wholesalers",
-            "status": "HEALTHY"
-        },
-        {
-            "sku": "SKU-SURF-05",
-            "name": "Surf Excel Quick Wash (1kg)",
-            "category": "FMCG",
-            "current_stock": 1,
-            "min_threshold": 10,
-            "unit": "packs",
-            "cost_price": 140.0,
-            "selling_price": 155.0,
-            "supplier": "HUL City Depot",
-            "status": "CRITICAL"
-        }
-    ],
+    "inventory": [],
     "supplier_invoices": [
         {
             "invoice_id": "INV-DEL-892",
@@ -174,8 +176,8 @@ def load_db(username: str = None) -> Dict[str, Any]:
     if "customers_udhaar" not in user_state or not isinstance(user_state.get("customers_udhaar"), list):
         user_state["customers_udhaar"] = []
         dirty = True
-    if not user_state.get("inventory"):
-        user_state["inventory"] = copy.deepcopy(DEFAULT_STATE["inventory"])
+    if "inventory" not in user_state or not isinstance(user_state.get("inventory"), list):
+        user_state["inventory"] = []
         dirty = True
     if not user_state.get("supplier_invoices"):
         user_state["supplier_invoices"] = copy.deepcopy(DEFAULT_STATE["supplier_invoices"])
@@ -276,16 +278,72 @@ def settle_udhaar(udhaar_id: str, username: str = None) -> Dict[str, Any]:
 def update_inventory_stock(sku: str, delta_stock: int, username: str = None) -> Dict[str, Any]:
     """Updates current stock count for an inventory item."""
     db = load_db(username)
-    for item in db["inventory"]:
-        if item["sku"] == sku:
-            item["current_stock"] += delta_stock
-            if item["current_stock"] <= item["min_threshold"]:
+    for item in db.get("inventory", []):
+        if item.get("sku") == sku:
+            item["current_stock"] = max(0, int(item.get("current_stock", 0)) + int(delta_stock))
+            if item["current_stock"] <= int(item.get("min_threshold", 0)):
                 item["status"] = "LOW_STOCK"
             else:
                 item["status"] = "HEALTHY"
             save_db(db, username)
             return item
     return {}
+
+
+def add_inventory_item(
+    name: str,
+    current_stock: int,
+    min_threshold: int,
+    unit: str = "packets",
+    category: str = "General",
+    cost_price: float = 0.0,
+    selling_price: float = 0.0,
+    supplier: str = "General Distributor",
+    username: str = None
+) -> Dict[str, Any]:
+    """Adds a custom merchant inventory product to the store ledger."""
+    db = load_db(username)
+    if "inventory" not in db or not isinstance(db.get("inventory"), list):
+        db["inventory"] = []
+
+    clean_name = name.strip()
+    prefix = "".join(c for c in clean_name.upper() if c.isalnum())[:4] or "ITEM"
+    new_sku = f"SKU-{prefix}-{len(db['inventory']) + 101}"
+
+    c_stock = max(0, int(current_stock))
+    m_thresh = max(0, int(min_threshold))
+    status = "LOW_STOCK" if c_stock <= m_thresh else "HEALTHY"
+
+    new_item = {
+        "sku": new_sku,
+        "name": clean_name,
+        "category": category.strip() or "General",
+        "current_stock": c_stock,
+        "min_threshold": m_thresh,
+        "unit": unit.strip() or "packets",
+        "cost_price": round(float(cost_price), 2),
+        "selling_price": round(float(selling_price), 2),
+        "supplier": supplier.strip() or "General Distributor",
+        "status": status
+    }
+
+    db["inventory"].insert(0, new_item)
+    save_db(db, username)
+    return new_item
+
+
+def delete_inventory_item(sku: str, username: str = None) -> bool:
+    """Deletes an item from the merchant inventory by SKU."""
+    db = load_db(username)
+    if "inventory" not in db or not isinstance(db.get("inventory"), list):
+        return False
+    orig_len = len(db["inventory"])
+    db["inventory"] = [item for item in db["inventory"] if item.get("sku") != sku]
+    if len(db["inventory"]) != orig_len:
+        save_db(db, username)
+        return True
+    return False
+
 
 
 def record_loan_drawdown(amount: float = 50000.0, username: str = None) -> Dict[str, Any]:

@@ -27,6 +27,8 @@ from database import (
     add_udhaar,
     settle_udhaar,
     update_inventory_stock,
+    add_inventory_item,
+    delete_inventory_item,
     record_loan_drawdown
 )
 from auth import register_user, authenticate_user, get_user
@@ -516,6 +518,41 @@ def api_update_stock(sku: str = Form(...), delta_stock: int = Form(...), usernam
     res = update_inventory_stock(sku, delta_stock, username=username)
     log_and_execute_action("STOCK_UPDATE", res, f"Updated stock for {sku} by {delta_stock} units", username=username)
     return res
+
+@app.post("/api/inventory/add")
+def api_add_inventory_item(
+    name: str = Form(...),
+    current_stock: int = Form(...),
+    min_threshold: int = Form(...),
+    unit: str = Form("packets"),
+    category: str = Form("General"),
+    cost_price: float = Form(0.0),
+    selling_price: float = Form(0.0),
+    supplier: str = Form("General Distributor"),
+    username: Optional[str] = Form(None)
+):
+    """Adds a custom item to the inventory."""
+    res = add_inventory_item(
+        name=name,
+        current_stock=current_stock,
+        min_threshold=min_threshold,
+        unit=unit,
+        category=category,
+        cost_price=cost_price,
+        selling_price=selling_price,
+        supplier=supplier,
+        username=username
+    )
+    log_and_execute_action("INVENTORY_ITEM_ADDED", res, f"Added new item '{name}' to inventory ({current_stock} {unit})", username=username)
+    return res
+
+@app.post("/api/inventory/delete")
+def api_delete_inventory_item(sku: str = Form(...), username: Optional[str] = Form(None)):
+    """Deletes an item from inventory."""
+    success = delete_inventory_item(sku, username=username)
+    if success:
+        log_and_execute_action("INVENTORY_ITEM_DELETED", {"sku": sku}, f"Deleted item {sku} from inventory", username=username)
+    return {"status": "SUCCESS" if success else "NOT_FOUND", "sku": sku}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

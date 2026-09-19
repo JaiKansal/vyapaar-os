@@ -1341,65 +1341,101 @@ with tab_loan:
 # --------------------------------------------------------------------------
 with tab_stock:
     st.markdown(f"### {T('📦 दुकान का सामान और सप्लायर आर्डर', '📦 Kirana Inventory & Supplier Restock Orders')}")
-    st.caption(T("सामान खत्म होने से पहले ही आर्डर करें ताकि ग्राहक खाली हाथ न लौटे।", "Reorder before stockouts occur so customers never return empty-handed."))
+    st.caption(T("दुकान का सामान खुद जोड़ें, स्टॉक ट्रैक करें, और सामान खत्म होने से पहले ही 1-क्लिक में आर्डर करें।", "Add your own shop products, track stock levels, and place 1-click distributor orders."))
 
-    st_c1, st_c2 = st.columns([1.5, 1])
+    st_c1, st_c2 = st.columns([1.5, 1.2])
     with st_c1:
-        st.markdown(f"#### {T('🛒 किराना सामान स्थिति (इन्वेंट्री):', '🛒 Kirana Inventory Status:')}")
+        total_inv_count = len(live_state.get("inventory", []))
+        st.markdown(f"#### {T(f'🛒 किराना सामान सूची: **{total_inv_count}** सामान', f'🛒 Store Inventory Items: **{total_inv_count}** Items')}")
         if live_state.get("inventory"):
             inv_items = live_state["inventory"]
             for idx, item in enumerate(inv_items):
                 sku_id = item.get("sku") or item.get("id", f"sku_{idx}")
                 item_name = item.get("name", "किराना सामान")
-                curr_stock = item.get("current_stock", 0)
-                min_thresh = item.get("min_threshold", 0)
+                curr_stock = int(item.get("current_stock", 0))
+                min_thresh = int(item.get("min_threshold", 0))
                 unit = item.get("unit", "यूनिट")
+                cat = item.get("category", "General")
+                cost_p = float(item.get("cost_price", 0.0))
+                sell_p = float(item.get("selling_price", 0.0))
+                supplier = item.get("supplier", "Distributor")
                 status_raw = item.get("status", "HEALTHY")
                 is_low = status_raw in ["LOW_STOCK", "CRITICAL_LOW", "LOW"] or curr_stock <= min_thresh
-                status_badge = T("🔴 कम है (Low)", "🔴 Low Stock") if is_low else T("🟢 पर्याप्त (OK)", "🟢 In Stock")
+                status_badge = (
+                    '<span style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">🔴 कम है (Low Stock)</span>'
+                    if is_low else
+                    '<span style="background: #dcfce7; color: #16a34a; border: 1px solid #86efac; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">🟢 पर्याप्त (In Stock)</span>'
+                )
 
-                i_col1, i_col2 = st.columns([2.5, 1.2])
+                i_col1, i_col2 = st.columns([2.2, 1.4])
                 with i_col1:
+                    price_str = f"खरीद: ₹{cost_p:,.0f} | बिक्री: ₹{sell_p:,.0f}" if (cost_p > 0 or sell_p > 0) else ""
                     st.markdown(f"""
-                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <strong>{item_name}</strong>
-                            <span style="font-weight: 700;">{status_badge}</span>
+                    <div style="background: #ffffff; border: 1.5px solid {'#f87171' if is_low else '#e2e8f0'}; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <div>
+                                <strong style="font-size: 1.02rem; color: #0f172a;">{item_name}</strong>
+                                <span style="background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; margin-left: 6px; font-weight: 600;">{cat}</span>
+                            </div>
+                            <div>{status_badge}</div>
                         </div>
-                        <div style="font-size: 0.82rem; color: #64748b; margin-top: 4px;">
-                            {T(f"वर्तमान स्टॉक: <strong>{curr_stock} {unit}</strong> &bull; न्यूनतम सीमा: {min_thresh} {unit}",
-                               f"Current Stock: <strong>{curr_stock} {unit}</strong> &bull; Min Threshold: {min_thresh} {unit}")}
+                        <div style="font-size: 0.85rem; color: #334155; margin-top: 6px;">
+                            {T(f"वर्तमान स्टॉक: <strong style='font-size: 0.98rem; color: {'#dc2626' if is_low else '#059669'};'>{curr_stock} {unit}</strong> &bull; न्यूनतम अलर्ट सीमा: <strong>{min_thresh} {unit}</strong>",
+                               f"Current Stock: <strong style='font-size: 0.98rem; color: {'#dc2626' if is_low else '#059669'};'>{curr_stock} {unit}</strong> &bull; Min Threshold: <strong>{min_thresh} {unit}</strong>")}
+                        </div>
+                        <div style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">
+                            🚚 सप्लायर: {supplier} {f'&bull; {price_str}' if price_str else ''}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                 with i_col2:
-                    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-                    if is_low:
-                        if st.button(T("🛒 आर्डर भेजें", "🛒 Restock Order"), key=f"reorder_main_{sku_id}"):
+                    st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+                    btn_c1, btn_c2, btn_c3 = st.columns([1.5, 0.9, 0.9])
+                    with btn_c1:
+                        if st.button(T("🛒 आर्डर (+20)", "🛒 Order (+20)"), key=f"reorder_main_{sku_id}"):
                             with st.spinner(T(f"{item_name} का आर्डर भेजा जा रहा है...", f"Placing restock order for {item_name}...")):
                                 try:
-                                    import database
-                                    import backend
+                                    import database, backend
                                     database.update_inventory_stock(sku_id, 20, username=st.session_state.get("username", "ramesh"))
                                     backend.log_and_execute_action(
                                         "DISTRIBUTOR_RESTOCK_CALL",
-                                        {"item": item_name, "quantity": 20, "supplier": item.get("supplier", "Distributor")},
+                                        {"item": item_name, "quantity": 20, "supplier": supplier},
                                         f"Restock order of 20 units placed for {item_name}",
                                         username=st.session_state.get("username", "ramesh")
                                     )
-                                    st.success(T(f"✅ {item_name} के 20 पैकेट का आर्डर डिस्ट्रीब्यूटर को भेज दिया और स्टॉक अपडेट हुआ!", f"✅ Restock order for {item_name} (20 units) dispatched and stock updated!"))
-                                    time.sleep(0.5)
+                                    st.success(T(f"✅ {item_name} (+20 {unit}) का आर्डर डिस्ट्रीब्यूटर को भेज दिया!", f"✅ Restock order for {item_name} (+20 {unit}) dispatched!"))
+                                    st.toast(T(f"📦 {item_name} स्टॉक +20 बढ़ गया!", f"📦 Restocked 20 units of {item_name}!"), icon="📦")
+                                    time.sleep(0.4)
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Restock error: {e}")
+                    with btn_c2:
+                        if st.button("➕1", key=f"inc_{sku_id}", help=T("स्टॉक में 1 जोड़ें", "Add 1 to stock")):
+                            import database
+                            database.update_inventory_stock(sku_id, 1, username=st.session_state.get("username", "ramesh"))
+                            st.rerun()
+                    with btn_c3:
+                        if st.button("🗑️", key=f"del_inv_{sku_id}", help=T("सामान हटाएं", "Delete item")):
+                            import database
+                            database.delete_inventory_item(sku_id, username=st.session_state.get("username", "ramesh"))
+                            st.toast(T(f"🗑️ {item_name} हटाया गया", f"🗑️ {item_name} removed"), icon="🗑️")
+                            st.rerun()
         else:
-            st.info(T("अभी किराना इन्वेंट्री सूची खाली है। डिफ़ॉल्ट किराना कैटलॉग लोड करने के लिए नीचे बटन दबाएं:", "Kirana inventory is currently empty. Click below to load standard Kirana catalog:"))
-            if st.button(T("📦 किराना कैटलॉग लोड करें", "📦 Load Kirana Catalog"), key="btn_reload_catalog"):
+            st.markdown(f"""
+            <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 24px 18px; text-align: center; margin-bottom: 14px;">
+                <div style="font-size: 2.2rem; margin-bottom: 8px;">📦</div>
+                <strong style="font-size: 1.05rem; color: #1e293b;">{T('दुकान की इन्वेंट्री सूची अभी खाली है', 'Store Inventory is Empty')}</strong>
+                <p style="color: #64748b; font-size: 0.88rem; margin-top: 6px; line-height: 1.5;">
+                    {T('दाएं हाथ पर दिए गए फॉर्म से अपनी दुकान का सामान खुद जोड़ें,<br>या काउंटर माइक पर बोलें: <strong>"हे मुनीमजी, अमूल दूध के 20 पैकेट आर्डर डाल दो"</strong>',
+                       'Use the form on the right to add your store products yourself,<br>or speak into counter mic: <strong>"Hey Munimji, order 20 packets of Amul Milk"</strong>')}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(T("📦 आम किराना कैटलॉग लोड करें (वैकल्पिक)", "📦 Load Starter Kirana Catalog (Optional)"), key="btn_reload_catalog"):
                 try:
-                    import database
-                    import copy
+                    import database, copy
                     db = database.load_db(st.session_state.get("username", "ramesh"))
-                    db["inventory"] = copy.deepcopy(database.DEFAULT_STATE["inventory"])
+                    db["inventory"] = copy.deepcopy(database.SAMPLE_KIRANA_CATALOG)
                     database.save_db(db, st.session_state.get("username", "ramesh"))
                     st.success(T("✅ किराना कैटलॉग लोड हो गया!", "✅ Catalog loaded!"))
                     time.sleep(0.4)
@@ -1408,6 +1444,90 @@ with tab_stock:
                     st.error(f"Error loading catalog: {e}")
 
     with st_c2:
+        st.markdown(f"#### {T('➕ नया सामान जोड़ें (Add Product):', '➕ Add New Item to Inventory:')}")
+        with st.form("form_add_custom_inventory"):
+            new_item_name = st.text_input(
+                T("सामान का नाम *", "Product / Item Name *"),
+                placeholder=T("उदा: अमूल ताज़ा दूध 500ml, आशीर्वाद आटा 10kg", "e.g. Amul Taaza Milk 500ml, Aashirvaad Atta 10kg")
+            )
+            new_cat = st.selectbox(
+                T("कैटेगरी (Category)", "Category"),
+                [
+                    T("🥛 डेयरी (Dairy)", "🥛 Dairy"),
+                    T("🌾 अनाज / आटा / दालें (Staples & Grains)", "🌾 Staples & Grains"),
+                    T("🫒 तेल & घी (Edible Oils & Ghee)", "🫒 Edible Oils & Ghee"),
+                    T("🌶️ मसाले & चीनी (Spices & Sugar)", "🌶️ Spices & Sugar"),
+                    T("🧼 साबुन, डिटर्जेंट & सफाई (Cleaning & FMCG)", "🧼 Cleaning & FMCG"),
+                    T("🍪 बिस्कुट, चाय & स्नैक्स (Biscuits, Tea & Snacks)", "🍪 Biscuits, Tea & Snacks"),
+                    T("📦 अन्य किराना सामान (Other Kirana)", "📦 Other Kirana")
+                ]
+            )
+            fc1, fc2 = st.columns(2)
+            with fc1:
+                new_stock = st.number_input(T("वर्तमान स्टॉक", "Current Stock"), min_value=0, value=10, step=1)
+            with fc2:
+                new_min = st.number_input(T("न्यूनतम सीमा (अलर्ट)", "Min Alert Threshold"), min_value=1, value=5, step=1)
+
+            fc3, fc4 = st.columns(2)
+            with fc3:
+                new_unit = st.selectbox(
+                    T("इकाई (Unit)", "Unit"),
+                    [
+                        T("पैकेट (packets)", "packets"),
+                        T("किलो (kg)", "kg"),
+                        T("लीटर (litres)", "litres"),
+                        T("बोरी (bags)", "bags"),
+                        T("डिब्बा (boxes)", "boxes"),
+                        T("पीस (pcs)", "pcs"),
+                        T("बोतल (bottles)", "bottles"),
+                        T("पाउच (pouches)", "pouches")
+                    ]
+                )
+            with fc4:
+                new_supplier = st.text_input(
+                    T("सप्लायर का नाम", "Supplier / Distributor"),
+                    placeholder=T("उदा: गोयल डेयरी डिस्ट्रीब्यूटर", "e.g. Goyal Dairy Wholesalers")
+                )
+
+            fc5, fc6 = st.columns(2)
+            with fc5:
+                new_cost = st.number_input(T("खरीद मूल्य (₹)", "Cost Price (₹)"), min_value=0.0, value=0.0, step=5.0)
+            with fc6:
+                new_sell = st.number_input(T("बिक्री मूल्य (₹)", "Selling Price (₹)"), min_value=0.0, value=0.0, step=5.0)
+
+            submitted_item = st.form_submit_button(T("➕ दुकान के स्टॉक में जोड़ें", "➕ Add to Shop Inventory"), type="primary", use_container_width=True)
+            if submitted_item:
+                if not new_item_name or not new_item_name.strip():
+                    st.error(T("कृपया सामान का नाम दर्ज करें।", "Please enter product name."))
+                else:
+                    try:
+                        import database, backend
+                        u_name = st.session_state.get("username", "ramesh")
+                        res_item = database.add_inventory_item(
+                            name=new_item_name.strip(),
+                            current_stock=int(new_stock),
+                            min_threshold=int(new_min),
+                            unit=new_unit.split(" ")[0].strip(),
+                            category=new_cat.split(" ")[1].strip() if len(new_cat.split(" ")) > 1 else new_cat,
+                            cost_price=float(new_cost),
+                            selling_price=float(new_sell),
+                            supplier=new_supplier.strip() or "General Distributor",
+                            username=u_name
+                        )
+                        backend.log_and_execute_action(
+                            "INVENTORY_ITEM_ADDED",
+                            res_item,
+                            f"Added new product '{new_item_name.strip()}' ({new_stock} units) to store inventory",
+                            username=u_name
+                        )
+                        st.success(T(f"✅ '{new_item_name.strip()}' इन्वेंट्री में जुड़ गया!", f"✅ '{new_item_name.strip()}' added to inventory!"))
+                        st.toast(T(f"📦 {new_item_name.strip()} स्टॉक में जुड़ गया!", f"📦 {new_item_name.strip()} added!"), icon="📦")
+                        time.sleep(0.4)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error adding item: {e}")
+
+        st.markdown("---")
         st.markdown(f"#### {T('🚚 सप्लायर बिल एवं देय तिथियां:', '🚚 Supplier Invoices & Due Dates:')}")
         if live_state.get("supplier_invoices"):
             for inv in live_state["supplier_invoices"]:
