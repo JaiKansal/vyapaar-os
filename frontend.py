@@ -1540,10 +1540,18 @@ with tab_parchi:
             key='radio_slip_source_main'
         )
 
+        # Clear stale results when mode changes
+        prev_mode = st.session_state.get('_prev_slip_mode', '')
+        if prev_mode != slip_mode:
+            st.session_state.pop('slip_result', None)
+            st.session_state.pop('extracted_raw_text', None)
+            st.session_state['_prev_slip_mode'] = slip_mode
+
         active_image_bytes = None
         active_image_filename = None
+        is_sample_mode = '📄' in slip_mode  # True = use preset text, no OCR
 
-        if '📷' in slip_mode:
+        if not is_sample_mode:
             uploaded_slip = st.file_uploader(
                 T('पर्ची की फोटो चुनें (JPG/PNG):', 'Choose Slip Photo (JPG/PNG):'),
                 type=['png', 'jpg', 'jpeg'],
@@ -1556,15 +1564,14 @@ with tab_parchi:
             else:
                 st.info(T('👆 कृपया ऊपर कच्ची पर्ची की फोटो अपलोड करें।', '👆 Please upload a photo of the handwritten slip above.'))
         else:
-            if os.path.exists('test_kacha_slip.jpg'):
-                with open('test_kacha_slip.jpg', 'rb') as f:
-                    active_image_bytes = f.read()
-                active_image_filename = 'test_kacha_slip.jpg'
-                st.image('test_kacha_slip.jpg', caption=T('हस्तलिखित किराना पर्ची (Sample Kirana Slip)', 'Handwritten Kirana Slip (Sample)'), use_container_width=True)
-            else:
-                st.warning(T('test_kacha_slip.jpg फ़ाइल नहीं मिली।', 'test_kacha_slip.jpg file not found.'))
+            # Sample mode: show preview image if it exists, but use preset TEXT directly (no OCR needed)
+            slip_img_path = os.path.join(os.path.dirname(__file__), 'test_kacha_slip.jpg')
+            if os.path.exists(slip_img_path):
+                st.image(slip_img_path, caption=T('हस्तलिखित किराना पर्ची (Sample)', 'Handwritten Kirana Slip (Sample)'), use_container_width=True)
+            st.info(T('📄 यह टेस्ट मोड है — सरवम एआई की जरूरत नहीं, प्रीसेट टेक्स्ट से डेमो चलेगा।',
+                      '📄 Test mode — uses preset demo text directly, no OCR needed.'))
 
-        # 1-CLICK ACTION BUTTON - NO CONFUSING BUTTONS, NO EXPLANATION ASKED!
+        # 1-CLICK ACTION BUTTON
         st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
         btn_scan = st.button(
             T('⚡ पर्ची स्कैन करें और सीधे बही-खाते में जोड़ें', '⚡ Scan Slip & Directly Ingest into Ledger'),
@@ -1574,12 +1581,46 @@ with tab_parchi:
         )
 
         if btn_scan:
-            if active_image_bytes:
+            if is_sample_mode:
+                # Sample Bill: directly call backend with slip_id, no image OCR
+                with st.spinner(T('📄 डेमो पर्ची से हिसाब निकाला जा रहा है...', '📄 Processing demo slip...')):
+                    try:
+                        try:
+                            r = requests.post(
+                                f"{BACKEND_URL}/api/process-slip",
+                                data={"slip_id": "bill_01", "username": st.session_state.get("username", "ramesh")},
+                                timeout=15
+                            )
+                            if r.status_code == 200:
+                                res_json = r.json()
+                            else:
+                                res_json = _direct_process_slip(raw_text_input=None, username=st.session_state.get("username", "ramesh"))
+                        except Exception:
+                            res_json = _direct_process_slip(raw_text_input=None, username=st.session_state.get("username", "ramesh"))
+
+                        if res_json.get("error"):
+                            st.error(res_json.get("error"))
+                        else:
+                            st.session_state['slip_result'] = res_json
+                            st.session_state['extracted_raw_text'] = res_json.get('raw_text', '')
+                            st.success(T('✅ डेमो पर्ची का हिसाब बही-खाते में दर्ज हो गया!', '✅ Demo slip ingested into ledger!'))
+                            time.sleep(0.5)
+                            st.rerun()
+                    except Exception as ex:
+                        st.error(f"Processing error: {ex}")
+
+            elif active_image_bytes:
+                # Real image: send to Sarvam OCR
                 with st.spinner(T('🔍 सरवम एआई (Sarvam Document Intelligence) द्वारा फोटो से हिसाब निकाला जा रहा है...', '🔍 Sarvam AI is reading handwritten slip directly from image...')):
                     try:
                         files = {'file': (active_image_filename or 'slip.jpg', active_image_bytes, 'image/jpeg')}
                         try:
-                            r = requests.post(f"{BACKEND_URL}/api/process-slip", data={"username": st.session_state.get("username", "ramesh")}, files=files, timeout=65)
+                            r = requests.post(
+                                f"{BACKEND_URL}/api/process-slip",
+                                data={"username": st.session_state.get("username", "ramesh")},
+                                files=files,
+                                timeout=65
+                            )
                             if r.status_code == 200:
                                 res_json = r.json()
                             else:
@@ -1593,7 +1634,7 @@ with tab_parchi:
                                 else:
                                     res_json = _direct_process_slip(active_image_bytes, active_image_filename, username=st.session_state.get("username", "ramesh"))
                         except Exception:
-                            # In-process fallback directly calls Sarvam Vision 1.5
+                            # In-process fallback: directly call Sarvam Vision
                             res_json = _direct_process_slip(active_image_bytes, active_image_filename, username=st.session_state.get("username", "ramesh"))
 
                         if res_json.get("error"):
